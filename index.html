@@ -10,66 +10,10 @@
     <div class="container">
         <header>
             <h1>📚 Data Dictionary Platform</h1>
-            <p class="subtitle">Manage organizational terms, definitions, and data standards</p>
+            <p class="subtitle">Organizational terms, definitions, and data standards</p>
         </header>
 
         <main>
-            <!-- Add/Edit Form Section -->
-            <section class="form-section">
-                <h2 id="form-title">Add New Entry</h2>
-                <form id="dictionary-form">
-                    <div class="form-group">
-                        <label for="term">Term *</label>
-                        <input type="text" id="term" name="term" required placeholder="e.g., API, Customer ID">
-                    </div>
-
-                    <div class="form-group">
-                        <label for="definition">Definition *</label>
-                        <textarea id="definition" name="definition" required rows="3" placeholder="Clear and concise explanation of the term"></textarea>
-                    </div>
-
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label for="abbreviation">Abbreviation</label>
-                            <input type="text" id="abbreviation" name="abbreviation" placeholder="e.g., API">
-                        </div>
-
-                        <div class="form-group">
-                            <label for="dataType">Data Type</label>
-                            <select id="dataType" name="dataType">
-                                <option value="">-- Select --</option>
-                                <option value="String">String</option>
-                                <option value="Number">Number</option>
-                                <option value="Integer">Integer</option>
-                                <option value="Float">Float</option>
-                                <option value="Boolean">Boolean</option>
-                                <option value="Date">Date</option>
-                                <option value="DateTime">DateTime</option>
-                                <option value="Array">Array</option>
-                                <option value="Object">Object</option>
-                                <option value="JSON">JSON</option>
-                                <option value="Other">Other</option>
-                            </select>
-                        </div>
-                    </div>
-
-                    <div class="form-group">
-                        <label for="inputFormat">Input Format</label>
-                        <input type="text" id="inputFormat" name="inputFormat" placeholder="e.g., YYYY-MM-DD, ###-###-####">
-                    </div>
-
-                    <div class="form-group">
-                        <label for="variations">Variations</label>
-                        <textarea id="variations" name="variations" rows="2" placeholder="Comma-separated list of alternative terms or spellings"></textarea>
-                    </div>
-
-                    <div class="form-actions">
-                        <button type="submit" class="btn btn-primary" id="submit-btn">Add Entry</button>
-                        <button type="button" class="btn btn-secondary" id="cancel-btn" style="display:none;">Cancel</button>
-                    </div>
-                </form>
-            </section>
-
             <!-- Search and Filter Section -->
             <section class="search-section">
                 <h2>Dictionary Entries</h2>
@@ -96,7 +40,7 @@
             <section class="table-section">
                 <div class="table-container">
                     <table id="dictionary-table">
-                        <thead>
+                        <thead id="dictionary-thead">
                             <tr>
                                 <th>Term</th>
                                 <th>Definition</th>
@@ -104,7 +48,6 @@
                                 <th>Data Type</th>
                                 <th>Input Format</th>
                                 <th>Variations</th>
-                                <th>Actions</th>
                             </tr>
                         </thead>
                         <tbody id="dictionary-tbody">
@@ -123,6 +66,6 @@
         </footer>
     </div>
 
-    <script src="app.js"></script>
+    <script src="public.js"></script>
 </body>
 </html>

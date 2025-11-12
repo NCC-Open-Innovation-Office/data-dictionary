@@ -1,0 +1,11 @@
+# Cloudflare Access configuration for protecting /admin/ path
+# This file tells Cloudflare Pages how to handle different paths
+
+# Protect the admin directory - require Cloudflare Access authentication
+/admin/*
+  CF-Access-Team-Domain: your-team-name.cloudflareaccess.com
+  CF-Access-Require-Cloudflare-Access: true
+
+# Public access for everything else (no authentication required)
+/*
+  X-Robots-Tag: all

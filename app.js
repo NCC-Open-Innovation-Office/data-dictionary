@@ -3,10 +3,14 @@ class DataDictionary {
     constructor() {
         this.entries = [];
         this.editingIndex = -1;
+        this.isAuthenticated = false;
         this.init();
     }
 
     init() {
+        // Check authentication state
+        this.checkAuth();
+        
         // Load data from localStorage
         this.loadData();
         
@@ -17,11 +21,38 @@ class DataDictionary {
         this.renderTable();
     }
 
+    checkAuth() {
+        const authState = localStorage.getItem('isAuthenticated');
+        this.isAuthenticated = authState === 'true';
+        this.updateUIForAuth();
+    }
+
+    updateUIForAuth() {
+        const adminElements = document.querySelectorAll('.admin-only');
+        const loginBtn = document.getElementById('login-btn');
+        const logoutBtn = document.getElementById('logout-btn');
+        
+        adminElements.forEach(el => {
+            el.style.display = this.isAuthenticated ? 'block' : 'none';
+        });
+        
+        loginBtn.style.display = this.isAuthenticated ? 'none' : 'inline-block';
+        logoutBtn.style.display = this.isAuthenticated ? 'inline-block' : 'none';
+        
+        // Re-render table to show/hide action buttons
+        this.renderTable();
+    }
+
     bindEvents() {
         const form = document.getElementById('dictionary-form');
         const searchInput = document.getElementById('search-input');
         const filterType = document.getElementById('filter-type');
         const cancelBtn = document.getElementById('cancel-btn');
+        const loginBtn = document.getElementById('login-btn');
+        const logoutBtn = document.getElementById('logout-btn');
+        const loginForm = document.getElementById('login-form');
+        const cancelLoginBtn = document.getElementById('cancel-login-btn');
+        const downloadExcelBtn = document.getElementById('download-excel-btn');
 
         form.addEventListener('submit', (e) => {
             e.preventDefault();
@@ -31,6 +62,45 @@ class DataDictionary {
         searchInput.addEventListener('input', () => this.renderTable());
         filterType.addEventListener('change', () => this.renderTable());
         cancelBtn.addEventListener('click', () => this.cancelEdit());
+        
+        loginBtn.addEventListener('click', () => this.showLoginModal());
+        logoutBtn.addEventListener('click', () => this.logout());
+        loginForm.addEventListener('submit', (e) => this.handleLogin(e));
+        cancelLoginBtn.addEventListener('click', () => this.hideLoginModal());
+        downloadExcelBtn.addEventListener('click', () => this.downloadExcel());
+    }
+
+    showLoginModal() {
+        document.getElementById('login-modal').style.display = 'flex';
+    }
+
+    hideLoginModal() {
+        document.getElementById('login-modal').style.display = 'none';
+        document.getElementById('login-form').reset();
+    }
+
+    handleLogin(e) {
+        e.preventDefault();
+        const username = document.getElementById('username').value;
+        const password = document.getElementById('password').value;
+        
+        // Simple authentication - in production, this should be server-side
+        if (username === 'admin' && password === 'admin123') {
+            this.isAuthenticated = true;
+            localStorage.setItem('isAuthenticated', 'true');
+            this.updateUIForAuth();
+            this.hideLoginModal();
+            alert('Login successful!');
+        } else {
+            alert('Invalid credentials. Please try again.');
+        }
+    }
+
+    logout() {
+        this.isAuthenticated = false;
+        localStorage.removeItem('isAuthenticated');
+        this.updateUIForAuth();
+        this.cancelEdit();
     }
 
     handleSubmit() {
@@ -140,6 +210,15 @@ class DataDictionary {
             const actualIndex = this.entries.indexOf(entry);
             const row = document.createElement('tr');
             
+            const actionsHtml = this.isAuthenticated ? `
+                <td>
+                    <div class="actions-cell">
+                        <button class="btn btn-edit" onclick="dictionary.editEntry(${actualIndex})">✏️ Edit</button>
+                        <button class="btn btn-delete" onclick="dictionary.deleteEntry(${actualIndex})">🗑️ Delete</button>
+                    </div>
+                </td>
+            ` : '';
+            
             row.innerHTML = `
                 <td><strong>${this.escapeHtml(entry.term)}</strong></td>
                 <td>${this.escapeHtml(entry.definition)}</td>
@@ -147,12 +226,7 @@ class DataDictionary {
                 <td>${entry.dataType ? `<span class="badge">${this.escapeHtml(entry.dataType)}</span>` : '<span class="text-muted">—</span>'}</td>
                 <td>${entry.inputFormat ? `<code>${this.escapeHtml(entry.inputFormat)}</code>` : '<span class="text-muted">—</span>'}</td>
                 <td>${entry.variations ? this.escapeHtml(entry.variations) : '<span class="text-muted">—</span>'}</td>
-                <td>
-                    <div class="actions-cell">
-                        <button class="btn btn-edit" onclick="dictionary.editEntry(${actualIndex})">✏️ Edit</button>
-                        <button class="btn btn-delete" onclick="dictionary.deleteEntry(${actualIndex})">🗑️ Delete</button>
-                    </div>
-                </td>
+                ${actionsHtml}
             `;
 
             tbody.appendChild(row);
@@ -269,6 +343,50 @@ class DataDictionary {
             }
         };
         reader.readAsText(file);
+    }
+
+    downloadExcel() {
+        if (!this.isAuthenticated) {
+            alert('You must be logged in to download data.');
+            return;
+        }
+
+        // Create CSV data (Excel can open CSV files)
+        const headers = ['Term', 'Definition', 'Abbreviation', 'Data Type', 'Input Format', 'Variations', 'Created At', 'Updated At'];
+        const csvRows = [headers.join(',')];
+
+        this.entries.forEach(entry => {
+            const row = [
+                this.escapeCsv(entry.term),
+                this.escapeCsv(entry.definition),
+                this.escapeCsv(entry.abbreviation || ''),
+                this.escapeCsv(entry.dataType || ''),
+                this.escapeCsv(entry.inputFormat || ''),
+                this.escapeCsv(entry.variations || ''),
+                this.escapeCsv(entry.createdAt ? new Date(entry.createdAt).toLocaleString() : ''),
+                this.escapeCsv(entry.updatedAt ? new Date(entry.updatedAt).toLocaleString() : '')
+            ];
+            csvRows.push(row.join(','));
+        });
+
+        const csvContent = csvRows.join('\n');
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `data-dictionary-${new Date().toISOString().split('T')[0]}.csv`;
+        link.click();
+        URL.revokeObjectURL(url);
+    }
+
+    escapeCsv(text) {
+        if (text === null || text === undefined) return '';
+        const str = String(text);
+        // Escape double quotes and wrap in quotes if contains comma, quote, or newline
+        if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+            return `"${str.replace(/"/g, '""')}"`;
+        }
+        return str;
     }
 }
 
