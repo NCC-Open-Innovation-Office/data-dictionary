@@ -22,7 +22,7 @@ services:
       dockerfile: Dockerfile
     container_name: data-dictionary-api
     ports:
-      - "5001:5000"
+      - "5000:5000"
     volumes:
       # Persist database on host
       - ./data:/app/data
