@@ -1,0 +1,47 @@
+version: '3.8'
+
+services:
+  # Frontend - Static site served by nginx
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: data-dictionary-frontend
+    ports:
+      - "8000:80"
+    depends_on:
+      - api
+    networks:
+      - dictionary-network
+    restart: unless-stopped
+
+  # Backend API - Flask application
+  api:
+    build:
+      context: ./api
+      dockerfile: Dockerfile
+    container_name: data-dictionary-api
+    ports:
+      - "5001:5000"
+    volumes:
+      # Persist database on host
+      - ./data:/app/data
+    environment:
+      - PORT=5000
+      - DATABASE=/app/data/dictionary.db
+    networks:
+      - dictionary-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+networks:
+  dictionary-network:
+    driver: bridge
+
+volumes:
+  dictionary-data:

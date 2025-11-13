@@ -4,29 +4,64 @@ A comprehensive web-based data dictionary platform for organizations to document
 
 ## 📋 Features
 
-- **Term Management**: Add, edit, and delete dictionary entries
+- **Term Management**: Add, edit, and delete dictionary entries with full CRUD operations
 - **Rich Metadata**: Track terms, definitions, abbreviations, data types, input formats, and variations
-- **Search & Filter**: Quickly find entries using search and type filtering
-- **Persistent Storage**: Data is saved locally in your browser using localStorage
-- **Sample Data**: Pre-loaded with example entries to demonstrate functionality
+- **Tag System**: Create custom tags with colors to organize and categorize entries
+- **Change Tracking**: Complete audit trail with before/after comparisons and discussion notes
+- **Search & Filter**: Advanced filtering by text search, data type, and tags
+- **Public/Admin Split**: Separate read-only public view and full-featured admin interface
+- **API Backend**: RESTful Flask API with SQLite database for persistent storage
 - **Responsive Design**: Works seamlessly on desktop and mobile devices
-- **Export/Import**: (Future feature) Export and import dictionary data as JSON
+- **Excel Export**: Download dictionary data as CSV for use in Excel
 
 ## 🚀 Getting Started
 
-### Installation
+### Quick Start with Docker (Recommended)
 
-No installation required! This is a client-side web application that runs entirely in your browser.
+1. **Prerequisites**: Install [Docker](https://docs.docker.com/get-docker/) and [Docker Compose](https://docs.docker.com/compose/install/)
+
+2. **Run the application**:
+   ```bash
+   ./start.sh
+   ```
+
+3. **Access the application**:
+   - Public view: http://localhost:8000
+   - Admin view: http://localhost:8000/admin/
+   - API: http://localhost:5001/api
+
+4. **Stop the application**:
+   ```bash
+   docker-compose down
+   ```
+
+### Manual Installation
+
+#### Backend (API)
+```bash
+cd api
+pip install -r requirements.txt
+python app.py
+```
+
+#### Frontend
+```bash
+python -m http.server 8000
+```
+
+## 🐳 Docker Deployment
+
+See [DOCKER.md](DOCKER.md) for detailed Docker deployment instructions.
 
 ### Usage
 
-1. **Open the application**: Simply open `index.html` in any modern web browser
-2. **View existing entries**: The dictionary table shows all current entries
-3. **Add new entry**: Fill out the form at the top and click "Add Entry"
-4. **Edit entry**: Click the "✏️ Edit" button on any entry
-5. **Delete entry**: Click the "🗑️ Delete" button on any entry
-6. **Search**: Use the search bar to filter entries by term, definition, or abbreviation
-7. **Filter by type**: Use the dropdown to filter entries by data type
+1. **View entries**: Browse the public dictionary at http://localhost:8000
+2. **Add/Edit entries**: Access admin interface at http://localhost:8000/admin/
+3. **Create tags**: Click "Manage Tags" in admin to create colored tags
+4. **Add discussion**: Use the discussion field to document why definitions were chosen
+5. **View history**: Click "View Change History" to see all changes with details
+6. **Filter by tags**: Use tag dropdown in public view to filter entries
+7. **Export data**: Click "Download Excel" to export as CSV
 
 ## 📊 Data Fields
 

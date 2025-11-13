@@ -3,12 +3,14 @@ class DataDictionary {
     constructor() {
         this.entries = [];
         this.editingIndex = -1;
+        this.changeHistory = [];
         this.init();
     }
 
     init() {
         // Load data from localStorage
         this.loadData();
+        this.loadChangeHistory();
         
         // Bind event listeners
         this.bindEvents();
@@ -23,6 +25,8 @@ class DataDictionary {
         const filterType = document.getElementById('filter-type');
         const cancelBtn = document.getElementById('cancel-btn');
         const downloadExcelBtn = document.getElementById('download-excel-btn');
+        const historyBtn = document.getElementById('view-history-btn');
+        const closeHistoryBtn = document.getElementById('close-history-btn');
 
         form.addEventListener('submit', (e) => {
             e.preventDefault();
@@ -33,6 +37,22 @@ class DataDictionary {
         filterType.addEventListener('change', () => this.renderTable());
         cancelBtn.addEventListener('click', () => this.cancelEdit());
         downloadExcelBtn.addEventListener('click', () => this.downloadExcel());
+        historyBtn.addEventListener('click', () => this.showHistory());
+        closeHistoryBtn.addEventListener('click', () => this.hideHistory());
+    }
+
+    logChange(action, entryTerm, oldData, newData) {
+        const change = {
+            timestamp: new Date().toISOString(),
+            action: action, // 'create', 'update', 'delete'
+            term: entryTerm,
+            oldData: oldData,
+            newData: newData,
+            user: 'Admin' // Will be replaced with actual user when Cloudflare Access is set up
+        };
+        
+        this.changeHistory.unshift(change); // Add to beginning
+        this.saveChangeHistory();
     }
 
     handleSubmit() {
@@ -50,9 +70,12 @@ class DataDictionary {
         if (this.editingIndex === -1) {
             // Add new entry
             this.entries.push(formData);
+            this.logChange('create', formData.term, null, formData);
         } else {
             // Update existing entry
+            const oldData = {...this.entries[this.editingIndex]};
             this.entries[this.editingIndex] = formData;
+            this.logChange('update', formData.term, oldData, formData);
             this.editingIndex = -1;
             document.getElementById('form-title').textContent = 'Add New Entry';
             document.getElementById('submit-btn').textContent = 'Add Entry';
@@ -87,7 +110,9 @@ class DataDictionary {
 
     deleteEntry(index) {
         if (confirm('Are you sure you want to delete this entry?')) {
+            const deletedEntry = {...this.entries[index]};
             this.entries.splice(index, 1);
+            this.logChange('delete', deletedEntry.term, deletedEntry, null);
             this.saveData();
             this.renderTable();
         }
@@ -249,6 +274,109 @@ class DataDictionary {
             return `"${str.replace(/"/g, '""')}"`;
         }
         return str;
+    }
+
+    saveChangeHistory() {
+        localStorage.setItem('dictionaryChangeHistory', JSON.stringify(this.changeHistory));
+    }
+
+    loadChangeHistory() {
+        const saved = localStorage.getItem('dictionaryChangeHistory');
+        if (saved) {
+            try {
+                this.changeHistory = JSON.parse(saved);
+            } catch (e) {
+                console.error('Error loading change history:', e);
+                this.changeHistory = [];
+            }
+        }
+    }
+
+    showHistory() {
+        const modal = document.getElementById('history-modal');
+        modal.style.display = 'flex';
+        this.renderHistory();
+    }
+
+    hideHistory() {
+        document.getElementById('history-modal').style.display = 'none';
+    }
+
+    renderHistory() {
+        const tbody = document.getElementById('history-tbody');
+        tbody.innerHTML = '';
+
+        if (this.changeHistory.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:40px;">No changes recorded yet.</td></tr>';
+            return;
+        }
+
+        this.changeHistory.forEach((change, index) => {
+            const row = document.createElement('tr');
+            const timestamp = new Date(change.timestamp).toLocaleString();
+            
+            let actionBadge = '';
+            if (change.action === 'create') {
+                actionBadge = '<span class="badge badge-create">Created</span>';
+            } else if (change.action === 'update') {
+                actionBadge = '<span class="badge badge-update">Updated</span>';
+            } else if (change.action === 'delete') {
+                actionBadge = '<span class="badge badge-delete">Deleted</span>';
+            }
+
+            let changes = '';
+            if (change.action === 'create') {
+                changes = 'New entry created';
+            } else if (change.action === 'delete') {
+                changes = 'Entry deleted';
+            } else if (change.action === 'update' && change.oldData && change.newData) {
+                const changedFields = [];
+                for (let key in change.newData) {
+                    if (key !== 'updatedAt' && key !== 'createdAt' && change.oldData[key] !== change.newData[key]) {
+                        changedFields.push(key);
+                    }
+                }
+                changes = changedFields.length > 0 ? `Modified: ${changedFields.join(', ')}` : 'No changes detected';
+            }
+
+            row.innerHTML = `
+                <td>${timestamp}</td>
+                <td>${actionBadge}</td>
+                <td><strong>${this.escapeHtml(change.term)}</strong></td>
+                <td>${changes}</td>
+                <td>${this.escapeHtml(change.user)}</td>
+                <td><button class="btn btn-small" onclick="dictionary.viewChangeDetail(${index})">View Details</button></td>
+            `;
+            tbody.appendChild(row);
+        });
+    }
+
+    viewChangeDetail(index) {
+        const change = this.changeHistory[index];
+        let detail = `Change Details\n\n`;
+        detail += `Timestamp: ${new Date(change.timestamp).toLocaleString()}\n`;
+        detail += `Action: ${change.action.toUpperCase()}\n`;
+        detail += `Term: ${change.term}\n`;
+        detail += `User: ${change.user}\n\n`;
+
+        if (change.action === 'create' && change.newData) {
+            detail += `New Data:\n`;
+            detail += JSON.stringify(change.newData, null, 2);
+        } else if (change.action === 'delete' && change.oldData) {
+            detail += `Deleted Data:\n`;
+            detail += JSON.stringify(change.oldData, null, 2);
+        } else if (change.action === 'update') {
+            detail += `Changes:\n`;
+            for (let key in change.newData) {
+                if (key !== 'updatedAt' && key !== 'createdAt' && change.oldData[key] !== change.newData[key]) {
+                    detail += `\n${key}:\n`;
+                    detail += `  Old: ${change.oldData[key] || '(empty)'}\n`;
+                    detail += `  New: ${change.newData[key] || '(empty)'}\n`;
+                }
+            }
+        }
+
+        alert(detail);
     }
 }
 

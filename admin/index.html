@@ -67,6 +67,26 @@
                         <textarea id="variations" name="variations" rows="2" placeholder="Comma-separated list of alternative terms or spellings"></textarea>
                     </div>
 
+                    <div class="form-group">
+                        <label for="discussion">Discussion (Internal Only)</label>
+                        <textarea id="discussion" name="discussion" rows="3" placeholder="Context about why this definition was chosen. Not visible to the public."></textarea>
+                        <small style="color: #666; font-size: 12px;">This field is only visible to admins and in change history.</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="entry-tags">Tags</label>
+                        <div id="entry-tags-container" class="tags-container">
+                            <!-- Tags will be displayed here -->
+                        </div>
+                        <div style="display: flex; gap: 10px; margin-top: 10px;">
+                            <select id="tag-select" class="tag-select">
+                                <option value="">-- Select a tag --</option>
+                            </select>
+                            <button type="button" class="btn btn-secondary btn-small" id="add-tag-btn">Add Tag</button>
+                            <button type="button" class="btn btn-secondary btn-small" id="manage-tags-btn">Manage Tags</button>
+                        </div>
+                    </div>
+
                     <div class="form-actions">
                         <button type="submit" class="btn btn-primary" id="submit-btn">Add Entry</button>
                         <button type="button" class="btn btn-secondary" id="cancel-btn" style="display:none;">Cancel</button>
@@ -78,9 +98,14 @@
             <section class="search-section">
                 <div class="search-header">
                     <h2>Dictionary Entries</h2>
-                    <button id="download-excel-btn" class="btn btn-primary btn-small">
-                        📥 Download Excel
-                    </button>
+                    <div class="header-buttons">
+                        <button id="view-history-btn" class="btn btn-secondary btn-small">
+                            📋 View Change History
+                        </button>
+                        <button id="download-excel-btn" class="btn btn-primary btn-small">
+                            📥 Download Excel
+                        </button>
+                    </div>
                 </div>
                 <div class="search-bar">
                     <input type="text" id="search-input" placeholder="🔍 Search by term, definition, or abbreviation...">
@@ -127,11 +152,77 @@
             </section>
         </main>
 
+        <!-- Change History Modal -->
+        <div id="history-modal" class="modal" style="display:none;">
+            <div class="modal-content modal-large">
+                <div class="modal-header">
+                    <h2>Change History</h2>
+                    <button id="close-history-btn" class="btn btn-secondary">Close</button>
+                </div>
+                <div class="history-content">
+                    <table class="history-table">
+                        <thead>
+                            <tr>
+                                <th>Timestamp</th>
+                                <th>Action</th>
+                                <th>Term</th>
+                                <th>Changes</th>
+                                <th>User</th>
+                                <th>Details</th>
+                            </tr>
+                        </thead>
+                        <tbody id="history-tbody">
+                            <!-- History entries will be dynamically added here -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Change Detail Modal -->
+        <div id="detail-modal" class="modal" style="display:none;">
+            <div class="modal-content modal-large">
+                <div class="modal-header">
+                    <h2>Change Details</h2>
+                    <button id="close-detail-btn" class="btn btn-secondary">Close</button>
+                </div>
+                <div id="detail-content" class="detail-content">
+                    <!-- Detail content will be dynamically added here -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Tag Management Modal -->
+        <div id="tag-modal" class="modal" style="display:none;">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h2>Manage Tags</h2>
+                    <button id="close-tag-modal-btn" class="btn btn-secondary">Close</button>
+                </div>
+                <div class="modal-body">
+                    <div class="form-group">
+                        <label for="new-tag-name">Create New Tag</label>
+                        <div style="display: flex; gap: 10px;">
+                            <input type="text" id="new-tag-name" placeholder="Tag name">
+                            <input type="color" id="new-tag-color" value="#004C8E" style="width: 60px;">
+                            <button class="btn btn-primary" id="create-tag-btn">Create</button>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>Existing Tags</label>
+                        <div id="tags-list" class="tags-list">
+                            <!-- Tags will be listed here -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <footer>
             <p>Data Dictionary Platform &copy; 2025 | Licensed under GPL-3.0</p>
         </footer>
     </div>
 
-    <script src="admin.js"></script>
+    <script src="admin-api.js"></script>
 </body>
 </html>
