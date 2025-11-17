@@ -1,122 +1,229 @@
-# Data Dictionary Platform
+# Data Dictionary Platform 🏗️
 
-A comprehensive web-based data dictionary platform for organizations to document and manage their data standards, terminology, and definitions.
+A modern web-based data dictionary platform for managing organizational terms, definitions, and data standards. Features a clean public interface for browsing and an admin interface for content management.
 
-## 📋 Features
+## ✨ Features
 
-- **Term Management**: Add, edit, and delete dictionary entries with full CRUD operations
-- **Rich Metadata**: Track terms, definitions, abbreviations, data types, input formats, and variations
-- **Tag System**: Create custom tags with colors to organize and categorize entries
-- **Change Tracking**: Complete audit trail with before/after comparisons and discussion notes
-- **Search & Filter**: Advanced filtering by text search, data type, and tags
-- **Public/Admin Split**: Separate read-only public view and full-featured admin interface
-- **API Backend**: RESTful Flask API with SQLite database for persistent storage
-- **Responsive Design**: Works seamlessly on desktop and mobile devices
-- **Excel Export**: Download dictionary data as CSV for use in Excel
+- **Public Interface**: Browse and search dictionary entries with filtering by type and reports
+- **Admin Interface**: Full CRUD operations for entries and report management
+- **Tagging System**: Organize entries with color-coded reports (tags)
+- **Change History**: Track all modifications with timestamps and discussions
+- **Docker Ready**: Containerized for easy deployment
+- **REST API**: Full API access for integrations
 
-## 🚀 Getting Started
+## 🚀 Quick Start
 
-### Quick Start with Docker (Recommended)
+### Using Published Images (Recommended)
 
-1. **Prerequisites**: Install [Docker](https://docs.docker.com/get-docker/) and [Docker Compose](https://docs.docker.com/compose/install/)
-
-2. **Run the application**:
+1. **Download the production compose file:**
    ```bash
-   ./start.sh
+   curl -o docker-compose.prod.yml https://raw.githubusercontent.com/marshalmiller/data-dictionary/main/docker-compose.prod.yml
    ```
 
-3. **Access the application**:
+2. **Create data directory:**
+   ```bash
+   mkdir -p data
+   ```
+
+3. **Start the application:**
+   ```bash
+   docker compose -f docker-compose.prod.yml up -d
+   ```
+
+4. **Access the application:**
    - Public view: http://localhost:8000
    - Admin view: http://localhost:8000/admin/
    - API: http://localhost:5001/api
 
-4. **Stop the application**:
+### Using Local Development
+
+1. **Clone the repository:**
    ```bash
-   docker-compose down
+   git clone https://github.com/marshalmiller/data-dictionary.git
+   cd data-dictionary
    ```
 
-### Manual Installation
+2. **Start with Docker:**
+   ```bash
+   docker compose up -d
+   ```
 
-#### Backend (API)
+   Or use the start script:
+   ```bash
+   ./start.sh
+   ```
+
+## 🔐 Default Credentials
+
+**Admin Login:**
+- Username: `admin`
+- Password: `admin123`
+
+> ⚠️ **Security Note**: Change these credentials in production!
+
+## 📚 Usage
+
+### Public Interface
+- **Search**: Find entries by term, definition, or abbreviation
+- **Filter**: Filter by data type or report category
+- **Browse**: View all dictionary entries in a clean, organized table
+
+### Admin Interface
+- **Entry Management**: Add, edit, and delete dictionary entries
+- **Report Management**: Create and manage color-coded report categories
+- **Change Tracking**: All modifications are logged with timestamps
+- **Export**: Download data as CSV for external use
+
+### API Endpoints
+
+- `GET /api/entries` - Get all entries (public)
+- `GET /api/tags` - Get all reports/tags (public)
+- `GET /api/health` - Health check
+- `POST /api/entries` - Create entry (admin)
+- `PUT /api/entries/{id}` - Update entry (admin)
+- `DELETE /api/entries/{id}` - Delete entry (admin)
+- `GET /api/history` - Get change history (admin)
+
+## 🏗️ Architecture
+
+```
+┌─────────────────┐    ┌─────────────────┐
+│   Frontend      │    │   Backend API   │
+│   (nginx)       │◄──►│   (Flask)       │
+│   Port 8000     │    │   Port 5001     │
+└─────────────────┘    └─────────────────┘
+                                │
+                       ┌─────────────────┐
+                       │   SQLite DB     │
+                       │   (Persistent)  │
+                       └─────────────────┘
+```
+
+## 🔧 Configuration
+
+### Environment Variables
+
+**API Container:**
+- `PORT`: API server port (default: 5001)
+- `DATABASE`: Database file path (default: /app/data/dictionary.db)
+
+### Volume Mounts
+
+- `./data:/app/data` - Persists SQLite database
+
+## 📦 Docker Images
+
+Images are automatically built and published to GitHub Container Registry:
+
+- **Frontend**: `ghcr.io/marshalmiller/data-dictionary-frontend:latest`
+- **API**: `ghcr.io/marshalmiller/data-dictionary-api:latest`
+
+### Available Tags
+- `latest` - Latest stable release
+- `main` - Latest development build
+- `v*.*.*` - Semantic version tags
+- `sha-*` - Commit-specific builds
+
+## 🛠️ Development
+
+### Prerequisites
+- Docker and Docker Compose
+- Python 3.12+ (for local development)
+- Node.js (optional, for frontend development)
+
+### Local Development Setup
+
+1. **Clone and enter directory:**
+   ```bash
+   git clone https://github.com/marshalmiller/data-dictionary.git
+   cd data-dictionary
+   ```
+
+2. **Start development environment:**
+   ```bash
+   # Using Docker (recommended)
+   docker compose up -d
+   
+   # Or run locally
+   cd api && pip install -r requirements.txt
+   python app.py &
+   cd .. && python -m http.server 8000
+   ```
+
+### Building Images Locally
+
 ```bash
-cd api
-pip install -r requirements.txt
-python app.py
+# Build both images
+docker compose build
+
+# Build specific image
+docker compose build frontend
+docker compose build api
 ```
 
-#### Frontend
+## 🔄 Updates and Maintenance
+
+### Updating to Latest Version
 ```bash
-python -m http.server 8000
+docker compose -f docker-compose.prod.yml pull
+docker compose -f docker-compose.prod.yml up -d
 ```
 
-## 🐳 Docker Deployment
+### Backup Data
+```bash
+# Backup database
+cp data/dictionary.db data/dictionary.db.backup
 
-See [DOCKER.md](DOCKER.md) for detailed Docker deployment instructions.
-
-### Usage
-
-1. **View entries**: Browse the public dictionary at http://localhost:8000
-2. **Add/Edit entries**: Access admin interface at http://localhost:8000/admin/
-3. **Create tags**: Click "Manage Tags" in admin to create colored tags
-4. **Add discussion**: Use the discussion field to document why definitions were chosen
-5. **View history**: Click "View Change History" to see all changes with details
-6. **Filter by tags**: Use tag dropdown in public view to filter entries
-7. **Export data**: Click "Download Excel" to export as CSV
-
-## 📊 Data Fields
-
-Each dictionary entry includes the following fields:
-
-- **Term** (required): The name of the data element or concept
-- **Definition** (required): A clear, concise explanation of the term
-- **Abbreviation**: Common shortened form or acronym
-- **Data Type**: Technical data type (String, Number, Boolean, Date, etc.)
-- **Input Format**: Expected format for data entry (e.g., YYYY-MM-DD)
-- **Variations**: Alternative names, spellings, or related terms
-
-## 🛠️ Technology Stack
-
-- **HTML5**: Structure and semantic markup
-- **CSS3**: Modern styling with gradients, flexbox, and grid
-- **Vanilla JavaScript**: Client-side functionality with no dependencies
-- **localStorage**: Browser-based data persistence
-
-## 📁 File Structure
-
-```
-data-dictionary/
-├── index.html      # Main HTML structure
-├── styles.css      # Styling and layout
-├── app.js          # Application logic and data management
-├── README.md       # Documentation
-└── LICENSE         # GPL-3.0 License
+# Or backup entire data directory
+tar -czf data-backup-$(date +%Y%m%d).tar.gz data/
 ```
 
-## 💡 Use Cases
+### View Logs
+```bash
+# All services
+docker compose logs -f
 
-Perfect for:
-- Data governance teams documenting organizational data standards
-- Development teams maintaining technical glossaries
-- Business analysts creating shared terminology
-- Compliance teams tracking regulated data elements
-- Data stewards managing data catalogs
+# Specific service
+docker compose logs -f api
+docker compose logs -f frontend
+```
 
-## 🔒 Data Privacy
+## 🚦 Monitoring
 
-All data is stored locally in your browser's localStorage. No data is sent to any external servers. Your dictionary entries remain private and under your control.
+### Health Checks
+- API health endpoint: `http://localhost:5001/api/health`
+- Docker health check: Built into API container
 
-## 🤝 Contributing
+### Troubleshooting
 
-Contributions are welcome! Feel free to submit issues or pull requests to improve the platform.
+**API Connection Issues:**
+1. Check if API container is running: `docker compose ps`
+2. Check API logs: `docker compose logs api`
+3. Verify health: `curl http://localhost:5001/api/health`
+
+**Frontend Issues:**
+1. Check nginx logs: `docker compose logs frontend`
+2. Verify files are served: `curl http://localhost:8000`
 
 ## 📄 License
 
-This project is licensed under the GNU General Public License v3.0 - see the [LICENSE](LICENSE) file for details.
+GPL-3.0 License - See [LICENSE](LICENSE) file for details.
+
+## 🤝 Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Test with Docker
+5. Submit a pull request
 
 ## 🆘 Support
 
-For questions, issues, or feature requests, please open an issue on the GitHub repository.
+For issues and questions:
+- Open an issue on GitHub
+- Check the troubleshooting section above
+- Review container logs for error messages
 
 ---
 
-**Note**: This is a client-side application. All data is stored in your browser's localStorage. To preserve your data when clearing browser data, consider implementing export/import functionality.
+Built with ❤️ for better data documentation and organizational knowledge management.

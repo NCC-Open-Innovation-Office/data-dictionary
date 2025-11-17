@@ -6,7 +6,9 @@ class DataDictionary {
         this.changeHistory = [];
         this.tags = [];
         this.currentEntryTags = [];
-        this.apiBase = 'http://localhost:5001/api';  // Change this to your deployed API URL
+        // API URL configuration for both local and Docker environments
+        const isLocalDev = window.location.port === '8000' && window.location.hostname === 'localhost';
+        this.apiBase = isLocalDev ? 'http://localhost:5001/api' : '/api';
         this.init();
     }
 
@@ -526,7 +528,7 @@ class DataDictionary {
 
     populateTagSelect() {
         const select = document.getElementById('tag-select');
-        select.innerHTML = '<option value="">-- Select a tag --</option>';
+        select.innerHTML = '<option value="">-- Select a report --</option>';
         this.tags.forEach(tag => {
             const option = document.createElement('option');
             option.value = tag.id;
@@ -565,7 +567,7 @@ class DataDictionary {
 
         // Check if tag already added
         if (this.currentEntryTags.find(t => t.id === tagId)) {
-            alert('Tag already added');
+            alert('Report already added');
             return;
         }
 
@@ -624,7 +626,7 @@ class DataDictionary {
         const color = document.getElementById('new-tag-color').value;
 
         if (!name) {
-            alert('Please enter a tag name');
+            alert('Please enter a report name');
             return;
         }
 
@@ -643,15 +645,15 @@ class DataDictionary {
             await this.loadTags();
             this.populateTagSelect();
             this.renderTagsList();
-            alert('Tag created successfully!');
+            alert('Report created successfully!');
         } catch (error) {
             console.error('Error creating tag:', error);
-            alert('Error creating tag: ' + error.message);
+            alert('Error creating report: ' + error.message);
         }
     }
 
     async deleteTag(tagId) {
-        if (!confirm('Are you sure you want to delete this tag? It will be removed from all entries.')) {
+        if (!confirm('Are you sure you want to delete this report? It will be removed from all entries.')) {
             return;
         }
 
@@ -667,10 +669,10 @@ class DataDictionary {
             this.populateTagSelect();
             this.renderTagsList();
             this.renderTable();
-            alert('Tag deleted successfully!');
+            alert('Report deleted successfully!');
         } catch (error) {
             console.error('Error deleting tag:', error);
-            alert('Error deleting tag: ' + error.message);
+            alert('Error deleting report: ' + error.message);
         }
     }
 

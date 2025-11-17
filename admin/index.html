@@ -74,16 +74,16 @@
                     </div>
 
                     <div class="form-group">
-                        <label for="entry-tags">Tags</label>
+                        <label for="entry-tags">Reports</label>
                         <div id="entry-tags-container" class="tags-container">
-                            <!-- Tags will be displayed here -->
+                            <!-- Reports will be displayed here -->
                         </div>
                         <div style="display: flex; gap: 10px; margin-top: 10px;">
                             <select id="tag-select" class="tag-select">
-                                <option value="">-- Select a tag --</option>
+                                <option value="">-- Select a report --</option>
                             </select>
-                            <button type="button" class="btn btn-secondary btn-small" id="add-tag-btn">Add Tag</button>
-                            <button type="button" class="btn btn-secondary btn-small" id="manage-tags-btn">Manage Tags</button>
+                            <button type="button" class="btn btn-secondary btn-small" id="add-tag-btn">Add Report</button>
+                            <button type="button" class="btn btn-secondary btn-small" id="manage-tags-btn">Manage Reports</button>
                         </div>
                     </div>
 
@@ -192,26 +192,26 @@
             </div>
         </div>
 
-        <!-- Tag Management Modal -->
+        <!-- Report Management Modal -->
         <div id="tag-modal" class="modal" style="display:none;">
             <div class="modal-content">
                 <div class="modal-header">
-                    <h2>Manage Tags</h2>
+                    <h2>Manage Reports</h2>
                     <button id="close-tag-modal-btn" class="btn btn-secondary">Close</button>
                 </div>
                 <div class="modal-body">
                     <div class="form-group">
-                        <label for="new-tag-name">Create New Tag</label>
+                        <label for="new-tag-name">Create New Report</label>
                         <div style="display: flex; gap: 10px;">
-                            <input type="text" id="new-tag-name" placeholder="Tag name">
+                            <input type="text" id="new-tag-name" placeholder="Report name">
                             <input type="color" id="new-tag-color" value="#004C8E" style="width: 60px;">
                             <button class="btn btn-primary" id="create-tag-btn">Create</button>
                         </div>
                     </div>
                     <div class="form-group">
-                        <label>Existing Tags</label>
+                        <label>Existing Reports</label>
                         <div id="tags-list" class="tags-list">
-                            <!-- Tags will be listed here -->
+                            <!-- Reports will be listed here -->
                         </div>
                     </div>
                 </div>

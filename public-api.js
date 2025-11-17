@@ -3,7 +3,9 @@ class DataDictionary {
     constructor() {
         this.entries = [];
         this.tags = [];
-        this.apiBase = 'http://localhost:5001/api';  // Change this to your deployed API URL
+        // API URL configuration for both local and Docker environments
+        const isLocalDev = window.location.port === '8000' && window.location.hostname === 'localhost';
+        this.apiBase = isLocalDev ? 'http://localhost:5001/api' : '/api';
         this.init();
     }
 
@@ -125,7 +127,7 @@ class DataDictionary {
 
     populateTagFilter() {
         const select = document.getElementById('filter-tag');
-        select.innerHTML = '<option value="">All Tags</option>';
+        select.innerHTML = '<option value="">All Reports</option>';
         this.tags.forEach(tag => {
             const option = document.createElement('option');
             option.value = tag.id;
