@@ -67,6 +67,28 @@
                         <textarea id="variations" name="variations" rows="2" placeholder="Comma-separated list of alternative terms or spellings"></textarea>
                     </div>
 
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="owner">Owner</label>
+                            <input type="text" id="owner" name="owner" list="owner-suggestions" placeholder="Enter owner name">
+                            <datalist id="owner-suggestions"></datalist>
+                        </div>
+                        <div class="form-group">
+                            <label for="stewards">Stewards</label>
+                            <input type="text" id="stewards" name="stewards" list="steward-suggestions" placeholder="Enter stewards">
+                            <datalist id="steward-suggestions"></datalist>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="classification">Classification</label>
+                        <select id="classification" name="classification">
+                            <option value="public">Public</option>
+                            <option value="private">Private</option>
+                            <option value="protected">Protected</option>
+                        </select>
+                    </div>
+
                     <div class="form-group">
                         <label for="discussion">Discussion (Internal Only)</label>
                         <textarea id="discussion" name="discussion" rows="3" placeholder="Context about why this definition was chosen. Not visible to the public."></textarea>
@@ -84,6 +106,22 @@
                             </select>
                             <button type="button" class="btn btn-secondary btn-small" id="add-tag-btn">Add Report</button>
                             <button type="button" class="btn btn-secondary btn-small" id="manage-tags-btn">Manage Reports</button>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="entry-links">Linked Entries</label>
+                        <small style="color: #666; font-size: 12px; display: block; margin-bottom: 8px;">
+                            Linked entries will show "See [term]" in the definition and jump to that entry.
+                        </small>
+                        <div id="entry-links-container" style="margin-bottom: 10px;">
+                            <!-- Linked entries will be displayed here -->
+                        </div>
+                        <div style="display: flex; gap: 10px;">
+                            <select id="link-select" class="tag-select">
+                                <option value="">Select an entry to link...</option>
+                            </select>
+                            <button type="button" class="btn btn-secondary btn-small" id="add-link-btn">Add Link</button>
                         </div>
                     </div>
 
@@ -138,6 +176,9 @@
                                 <th>Data Type</th>
                                 <th>Input Format</th>
                                 <th>Variations</th>
+                                <th>Owner</th>
+                                <th>Stewards</th>
+                                <th>Classification</th>
                                 <th>Actions</th>
                             </tr>
                         </thead>

@@ -6,6 +6,7 @@ class DataDictionary {
         this.changeHistory = [];
         this.tags = [];
         this.currentEntryTags = [];
+        this.currentEntryLinks = [];
         // API URL configuration for both local and Docker environments
         const isLocalDev = window.location.port === '8000' && window.location.hostname === 'localhost';
         this.apiBase = isLocalDev ? 'http://localhost:5001/api' : '/api';
@@ -17,6 +18,8 @@ class DataDictionary {
         await this.loadData();
         await this.loadChangeHistory();
         await this.loadTags();
+        await this.loadOwners();
+        await this.loadStewards();
         
         // Bind event listeners
         this.bindEvents();
@@ -24,6 +27,7 @@ class DataDictionary {
         // Render initial table
         this.renderTable();
         this.populateTagSelect();
+        this.populateLinkSelect();
     }
 
     bindEvents() {
@@ -39,6 +43,7 @@ class DataDictionary {
         const manageTagsBtn = document.getElementById('manage-tags-btn');
         const closeTagModalBtn = document.getElementById('close-tag-modal-btn');
         const createTagBtn = document.getElementById('create-tag-btn');
+        const addLinkBtn = document.getElementById('add-link-btn');
 
         form.addEventListener('submit', (e) => {
             e.preventDefault();
@@ -56,6 +61,7 @@ class DataDictionary {
         manageTagsBtn.addEventListener('click', () => this.showTagManagement());
         closeTagModalBtn.addEventListener('click', () => this.hideTagManagement());
         createTagBtn.addEventListener('click', () => this.createTag());
+        addLinkBtn.addEventListener('click', () => this.addLinkToEntry());
     }
 
     async handleSubmit() {
@@ -66,11 +72,16 @@ class DataDictionary {
             dataType: document.getElementById('dataType').value,
             inputFormat: document.getElementById('inputFormat').value.trim(),
             variations: document.getElementById('variations').value.trim(),
+            owner: document.getElementById('owner').value.trim(),
+            stewards: document.getElementById('stewards').value.trim(),
+            classification: document.getElementById('classification').value,
             discussion: document.getElementById('discussion').value.trim(),
             user: 'Admin'  // Will be replaced with Cloudflare Access user
         };
 
         try {
+            let entryId;
+            
             if (this.editingIndex === -1) {
                 // Create new entry
                 const response = await fetch(`${this.apiBase}/entries`, {
@@ -83,10 +94,17 @@ class DataDictionary {
 
                 if (!response.ok) throw new Error('Failed to create entry');
                 
+                const newEntry = await response.json();
+                entryId = newEntry.id;
+                
+                // Sync tags and links for new entry
+                await this.syncEntryTags(entryId);
+                await this.syncEntryLinks(entryId);
+                
                 alert('Entry created successfully!');
             } else {
                 // Update existing entry
-                const entryId = this.entries[this.editingIndex].id;
+                entryId = this.entries[this.editingIndex].id;
                 const response = await fetch(`${this.apiBase}/entries/${entryId}`, {
                     method: 'PUT',
                     headers: {
@@ -97,17 +115,14 @@ class DataDictionary {
 
                 if (!response.ok) throw new Error('Failed to update entry');
                 
+                // Sync tags for existing entry (links are synced in real-time)
+                await this.syncEntryTags(entryId);
+                
                 alert('Entry updated successfully!');
                 this.editingIndex = -1;
                 document.getElementById('form-title').textContent = 'Add New Entry';
                 document.getElementById('submit-btn').textContent = 'Add Entry';
                 document.getElementById('cancel-btn').style.display = 'none';
-            }
-
-            // Sync tags if editing
-            if (this.editingIndex !== -1) {
-                const entryId = this.entries[this.editingIndex].id;
-                await this.syncEntryTags(entryId);
             }
 
             await this.loadData();
@@ -130,11 +145,19 @@ class DataDictionary {
         document.getElementById('dataType').value = entry.dataType || '';
         document.getElementById('inputFormat').value = entry.inputFormat || '';
         document.getElementById('variations').value = entry.variations || '';
+        document.getElementById('owner').value = entry.owner || '';
+        document.getElementById('stewards').value = entry.stewards || '';
+        document.getElementById('classification').value = entry.classification || 'public';
         document.getElementById('discussion').value = entry.discussion || '';
         
         // Load tags
         this.currentEntryTags = entry.tags || [];
         this.renderEntryTags();
+
+        // Load links
+        this.currentEntryLinks = entry.links || [];
+        this.renderEntryLinks();
+        this.populateLinkSelect(entry.id);
 
         // Update UI
         document.getElementById('form-title').textContent = 'Edit Entry';
@@ -173,7 +196,9 @@ class DataDictionary {
     cancelEdit() {
         this.editingIndex = -1;
         this.currentEntryTags = [];
+        this.currentEntryLinks = [];
         this.renderEntryTags();
+        this.renderEntryLinks();
         this.resetForm();
         document.getElementById('form-title').textContent = 'Add New Entry';
         document.getElementById('submit-btn').textContent = 'Add Entry';
@@ -182,8 +207,12 @@ class DataDictionary {
 
     resetForm() {
         document.getElementById('dictionary-form').reset();
+        document.getElementById('classification').value = 'public'; // Reset to default
         this.currentEntryTags = [];
+        this.currentEntryLinks = [];
         this.renderEntryTags();
+        this.renderEntryLinks();
+        this.populateLinkSelect(); // Refresh the link dropdown
     }
 
     filterEntries() {
@@ -241,6 +270,9 @@ class DataDictionary {
                 <td>${entry.dataType ? `<span class="badge">${this.escapeHtml(entry.dataType)}</span>` : '<span class="text-muted">—</span>'}</td>
                 <td>${entry.inputFormat ? `<code>${this.escapeHtml(entry.inputFormat)}</code>` : '<span class="text-muted">—</span>'}</td>
                 <td>${entry.variations ? this.escapeHtml(entry.variations) : '<span class="text-muted">—</span>'}</td>
+                <td>${entry.owner ? this.escapeHtml(entry.owner) : '<span class="text-muted">—</span>'}</td>
+                <td>${entry.stewards ? this.escapeHtml(entry.stewards) : '<span class="text-muted">—</span>'}</td>
+                <td>${entry.classification ? `<span class="classification-${entry.classification}">${this.escapeHtml(entry.classification.charAt(0).toUpperCase() + entry.classification.slice(1))}</span>` : '<span class="text-muted">—</span>'}</td>
                 <td>
                     <div class="actions-cell">
                         <button class="btn btn-edit" onclick="dictionary.editEntry(${actualIndex})">✏️ Edit</button>
@@ -697,6 +729,192 @@ class DataDictionary {
             `;
             list.appendChild(item);
         });
+    }
+
+    async loadOwners() {
+        try {
+            const response = await fetch(`${this.apiBase}/owners`);
+            if (!response.ok) throw new Error('Failed to load owners');
+            const owners = await response.json();
+            this.populateDatalist('owner-suggestions', owners);
+        } catch (error) {
+            console.error('Error loading owners:', error);
+        }
+    }
+
+    async loadStewards() {
+        try {
+            const response = await fetch(`${this.apiBase}/stewards`);
+            if (!response.ok) throw new Error('Failed to load stewards');
+            const stewards = await response.json();
+            this.populateDatalist('steward-suggestions', stewards);
+        } catch (error) {
+            console.error('Error loading stewards:', error);
+        }
+    }
+
+    populateDatalist(datalistId, options) {
+        const datalist = document.getElementById(datalistId);
+        if (!datalist) return;
+        
+        datalist.innerHTML = '';
+        options.forEach(option => {
+            const optionElement = document.createElement('option');
+            optionElement.value = option;
+            datalist.appendChild(optionElement);
+        });
+    }
+
+    // Link Management Functions
+    async populateLinkSelect(currentEntryId = null) {
+        const select = document.getElementById('link-select');
+        if (!select) return;
+        
+        select.innerHTML = '<option value="">Select an entry to link...</option>';
+        
+        // Filter out the current entry if editing
+        const availableEntries = this.entries.filter(e => e.id !== currentEntryId);
+        
+        availableEntries.forEach(entry => {
+            const option = document.createElement('option');
+            option.value = entry.id;
+            option.textContent = entry.term;
+            select.appendChild(option);
+        });
+    }
+
+    renderEntryLinks() {
+        const container = document.getElementById('entry-links-container');
+        if (!container) return;
+        
+        container.innerHTML = '';
+        
+        if (this.currentEntryLinks.length === 0) {
+            container.innerHTML = '<p style="color:#999; font-size:0.9em;">No linked entries yet.</p>';
+            return;
+        }
+
+        this.currentEntryLinks.forEach(link => {
+            const linkDiv = document.createElement('div');
+            linkDiv.className = 'entry-link-item';
+            linkDiv.style.cssText = 'display:flex; align-items:center; gap:10px; padding:8px; background:#f5f5f5; border-radius:4px; margin-bottom:8px;';
+            linkDiv.innerHTML = `
+                <span style="flex:1;">${this.escapeHtml(link.target_term)}</span>
+                <button class="btn btn-delete btn-small" onclick="dictionary.removeLinkFromEntry(${link.link_id || link.target_entry_id})">Remove</button>
+            `;
+            container.appendChild(linkDiv);
+        });
+    }
+
+    async addLinkToEntry() {
+        const select = document.getElementById('link-select');
+        const targetEntryId = parseInt(select.value);
+        
+        if (!targetEntryId) {
+            alert('Please select an entry to link');
+            return;
+        }
+
+        // Check if link already added
+        if (this.currentEntryLinks.find(l => l.target_entry_id === targetEntryId)) {
+            alert('Entry already linked');
+            return;
+        }
+
+        // Find the target entry to get its term
+        const targetEntry = this.entries.find(e => e.id === targetEntryId);
+        if (!targetEntry) return;
+
+        // If editing existing entry, save immediately
+        if (this.editingIndex !== -1) {
+            const sourceEntryId = this.entries[this.editingIndex].id;
+            
+            try {
+                const response = await fetch(`${this.apiBase}/entries/${sourceEntryId}/links`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        target_entry_id: targetEntryId,
+                        link_type: 'see_also'
+                    })
+                });
+
+                if (!response.ok) throw new Error('Failed to add link');
+                
+                const newLink = await response.json();
+                this.currentEntryLinks.push(newLink);
+                this.renderEntryLinks();
+                select.value = '';
+                
+                // Reload data to update links
+                await this.loadData();
+                this.renderTable();
+            } catch (error) {
+                console.error('Error adding link:', error);
+                alert('Error adding link: ' + error.message);
+            }
+        } else {
+            // For new entries, just add to array (will be saved with entry)
+            this.currentEntryLinks.push({
+                target_entry_id: targetEntryId,
+                target_term: targetEntry.term,
+                link_type: 'see_also'
+            });
+            this.renderEntryLinks();
+            select.value = '';
+        }
+    }
+
+    async removeLinkFromEntry(linkId) {
+        // If editing existing entry, delete from server
+        if (this.editingIndex !== -1) {
+            const sourceEntryId = this.entries[this.editingIndex].id;
+            
+            try {
+                const response = await fetch(`${this.apiBase}/entries/${sourceEntryId}/links/${linkId}`, {
+                    method: 'DELETE'
+                });
+
+                if (!response.ok) throw new Error('Failed to remove link');
+                
+                this.currentEntryLinks = this.currentEntryLinks.filter(l => 
+                    (l.link_id || l.target_entry_id) !== linkId
+                );
+                this.renderEntryLinks();
+                
+                // Reload data to update links
+                await this.loadData();
+                this.renderTable();
+            } catch (error) {
+                console.error('Error removing link:', error);
+                alert('Error removing link: ' + error.message);
+            }
+        } else {
+            // For new entries, just remove from array
+            this.currentEntryLinks = this.currentEntryLinks.filter(l => l.target_entry_id !== linkId);
+            this.renderEntryLinks();
+        }
+    }
+
+    async syncEntryLinks(entryId) {
+        try {
+            // For new entries, add all links
+            for (const link of this.currentEntryLinks) {
+                // Skip if it already has a link_id (already exists on server)
+                if (link.link_id) continue;
+                
+                await fetch(`${this.apiBase}/entries/${entryId}/links`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        target_entry_id: link.target_entry_id,
+                        link_type: link.link_type || 'see_also'
+                    })
+                });
+            }
+        } catch (error) {
+            console.error('Error syncing links:', error);
+        }
     }
 }
 

@@ -31,11 +31,30 @@ def init_db():
             dataType TEXT,
             inputFormat TEXT,
             variations TEXT,
+            owner TEXT,
+            stewards TEXT,
+            classification TEXT DEFAULT 'public',
             discussion TEXT,
             createdAt TEXT NOT NULL,
             updatedAt TEXT NOT NULL
         )
     ''')
+    
+    # Add new columns if they don't exist (for existing databases)
+    try:
+        cursor.execute('ALTER TABLE entries ADD COLUMN owner TEXT')
+    except sqlite3.OperationalError:
+        pass
+    
+    try:
+        cursor.execute('ALTER TABLE entries ADD COLUMN stewards TEXT')
+    except sqlite3.OperationalError:
+        pass
+    
+    try:
+        cursor.execute('ALTER TABLE entries ADD COLUMN classification TEXT DEFAULT "public"')
+    except sqlite3.OperationalError:
+        pass
     
     # Create change_history table
     cursor.execute('''
@@ -72,6 +91,19 @@ def init_db():
         )
     ''')
     
+    # Create entry_links table for word linking feature
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS entry_links (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            source_entry_id INTEGER NOT NULL,
+            target_entry_id INTEGER NOT NULL,
+            link_type TEXT DEFAULT 'see_also',
+            createdAt TEXT NOT NULL,
+            FOREIGN KEY (source_entry_id) REFERENCES entries(id) ON DELETE CASCADE,
+            FOREIGN KEY (target_entry_id) REFERENCES entries(id) ON DELETE CASCADE
+        )
+    ''')
+    
     conn.commit()
     conn.close()
 
@@ -104,6 +136,16 @@ def get_entries():
                 ORDER BY t.name
             ''', (entry['id'],))
             entry['tags'] = [dict(row) for row in cursor.fetchall()]
+            
+            # Get links for each entry
+            cursor.execute('''
+                SELECT el.id as link_id, el.target_entry_id, el.link_type, 
+                       e.term as target_term
+                FROM entry_links el
+                JOIN entries e ON el.target_entry_id = e.id
+                WHERE el.source_entry_id = ?
+            ''', (entry['id'],))
+            entry['links'] = [dict(row) for row in cursor.fetchall()]
         
         conn.close()
         return jsonify(entries)
@@ -138,8 +180,10 @@ def create_entry():
         cursor = conn.cursor()
         
         cursor.execute('''
-            INSERT INTO entries (term, definition, abbreviation, dataType, inputFormat, variations, discussion, createdAt, updatedAt)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO entries (term, definition, abbreviation, dataType, 
+                               inputFormat, variations, owner, stewards, 
+                               classification, discussion, createdAt, updatedAt)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', (
             data['term'],
             data['definition'],
@@ -147,6 +191,9 @@ def create_entry():
             data.get('dataType', ''),
             data.get('inputFormat', ''),
             data.get('variations', ''),
+            data.get('owner', ''),
+            data.get('stewards', ''),
+            data.get('classification', 'public'),
             data.get('discussion', ''),
             now,
             now
@@ -199,7 +246,8 @@ def update_entry(entry_id):
         cursor.execute('''
             UPDATE entries
             SET term = ?, definition = ?, abbreviation = ?, dataType = ?, 
-                inputFormat = ?, variations = ?, discussion = ?, updatedAt = ?
+                inputFormat = ?, variations = ?, owner = ?, stewards = ?,
+                classification = ?, discussion = ?, updatedAt = ?
             WHERE id = ?
         ''', (
             data['term'],
@@ -208,6 +256,9 @@ def update_entry(entry_id):
             data.get('dataType', ''),
             data.get('inputFormat', ''),
             data.get('variations', ''),
+            data.get('owner', ''),
+            data.get('stewards', ''),
+            data.get('classification', 'public'),
             data.get('discussion', ''),
             now,
             entry_id
@@ -382,6 +433,103 @@ def remove_entry_tag(entry_id, tag_id):
         return jsonify({'message': 'Tag removed from entry'})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/owners', methods=['GET'])
+def get_owners():
+    """Get unique list of owners for autocomplete"""
+    try:
+        conn = get_db()
+        cursor = conn.cursor()
+        cursor.execute('SELECT DISTINCT owner FROM entries WHERE owner IS NOT NULL AND owner != "" ORDER BY owner')
+        owners = [row[0] for row in cursor.fetchall()]
+        conn.close()
+        return jsonify(owners)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/stewards', methods=['GET'])
+def get_stewards():
+    """Get unique list of stewards for autocomplete"""
+    try:
+        conn = get_db()
+        cursor = conn.cursor()
+        cursor.execute('SELECT DISTINCT stewards FROM entries WHERE stewards IS NOT NULL AND stewards != "" ORDER BY stewards')
+        stewards = [row[0] for row in cursor.fetchall()]
+        conn.close()
+        return jsonify(stewards)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/entries/<int:entry_id>/links', methods=['GET'])
+def get_entry_links(entry_id):
+    """Get all links for an entry"""
+    try:
+        conn = get_db()
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT el.id as link_id, el.target_entry_id, el.link_type,
+                   e.term as target_term
+            FROM entry_links el
+            JOIN entries e ON el.target_entry_id = e.id
+            WHERE el.source_entry_id = ?
+        ''', (entry_id,))
+        links = [dict(row) for row in cursor.fetchall()]
+        conn.close()
+        return jsonify(links)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/entries/<int:entry_id>/links', methods=['POST'])
+def add_entry_link(entry_id):
+    """Add a link to an entry"""
+    try:
+        data = request.json
+        now = datetime.utcnow().isoformat()
+        
+        conn = get_db()
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+            INSERT INTO entry_links (source_entry_id, target_entry_id, link_type, createdAt)
+            VALUES (?, ?, ?, ?)
+        ''', (entry_id, data['target_entry_id'], data.get('link_type', 'see_also'), now))
+        
+        link_id = cursor.lastrowid
+        
+        # Get the target entry term
+        cursor.execute('SELECT term FROM entries WHERE id = ?', (data['target_entry_id'],))
+        target_term = cursor.fetchone()[0]
+        
+        conn.commit()
+        conn.close()
+        
+        return jsonify({
+            'link_id': link_id,
+            'target_entry_id': data['target_entry_id'],
+            'target_term': target_term,
+            'link_type': data.get('link_type', 'see_also')
+        }), 201
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/entries/<int:entry_id>/links/<int:link_id>', methods=['DELETE'])
+def remove_entry_link(entry_id, link_id):
+    """Remove a link from an entry"""
+    try:
+        conn = get_db()
+        cursor = conn.cursor()
+        cursor.execute('DELETE FROM entry_links WHERE id = ? AND source_entry_id = ?', (link_id, entry_id))
+        conn.commit()
+        conn.close()
+        return jsonify({'message': 'Link removed successfully'})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5001))

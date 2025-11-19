@@ -71,6 +71,7 @@ class DataDictionary {
 
         filteredEntries.forEach((entry) => {
             const row = document.createElement('tr');
+            row.id = `entry-${entry.id}`; // Add ID for scrolling
             
             // Render tags
             let tagsHtml = '';
@@ -80,20 +81,44 @@ class DataDictionary {
                 ).join(' ');
             }
             
+            // Render definition with linked entries
+            let definitionHtml = this.escapeHtml(entry.definition);
+            if (entry.links && entry.links.length > 0) {
+                const linksHtml = entry.links.map(link => 
+                    `<a href="#entry-${link.target_entry_id}" class="entry-link" onclick="dictionary.scrollToEntry(${link.target_entry_id}); return false;">See ${this.escapeHtml(link.target_term)}</a>`
+                ).join(', ');
+                definitionHtml += `<div style="margin-top: 8px; font-style: italic; color: #666;">${linksHtml}</div>`;
+            }
+            
             row.innerHTML = `
                 <td>
                     <strong>${this.escapeHtml(entry.term)}</strong>
                     ${tagsHtml ? `<div style="margin-top: 5px;">${tagsHtml}</div>` : ''}
                 </td>
-                <td>${this.escapeHtml(entry.definition)}</td>
+                <td>${definitionHtml}</td>
                 <td>${entry.abbreviation ? this.escapeHtml(entry.abbreviation) : '<span class="text-muted">—</span>'}</td>
                 <td>${entry.dataType ? `<span class="badge">${this.escapeHtml(entry.dataType)}</span>` : '<span class="text-muted">—</span>'}</td>
                 <td>${entry.inputFormat ? `<code>${this.escapeHtml(entry.inputFormat)}</code>` : '<span class="text-muted">—</span>'}</td>
                 <td>${entry.variations ? this.escapeHtml(entry.variations) : '<span class="text-muted">—</span>'}</td>
+                <td>${entry.owner ? this.escapeHtml(entry.owner) : '<span class="text-muted">—</span>'}</td>
+                <td>${entry.stewards ? this.escapeHtml(entry.stewards) : '<span class="text-muted">—</span>'}</td>
+                <td>${entry.classification ? `<span class="classification-${entry.classification}">${this.escapeHtml(entry.classification.charAt(0).toUpperCase() + entry.classification.slice(1))}</span>` : '<span class="text-muted">—</span>'}</td>
             `;
 
             tbody.appendChild(row);
         });
+    }
+
+    scrollToEntry(entryId) {
+        const element = document.getElementById(`entry-${entryId}`);
+        if (element) {
+            element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            // Add a highlight effect
+            element.style.backgroundColor = '#fff3cd';
+            setTimeout(() => {
+                element.style.backgroundColor = '';
+            }, 2000);
+        }
     }
 
     escapeHtml(text) {

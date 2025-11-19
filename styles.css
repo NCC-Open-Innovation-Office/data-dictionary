@@ -695,3 +695,56 @@ footer {
     border: 1px solid #ddd;
 }
 
+/* Classification badges */
+.classification-public {
+    display: inline-block;
+    padding: 3px 8px;
+    border-radius: 12px;
+    font-size: 10px;
+    font-weight: bold;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    background: #28a745;
+    color: white;
+}
+
+.classification-private {
+    display: inline-block;
+    padding: 3px 8px;
+    border-radius: 12px;
+    font-size: 10px;
+    font-weight: bold;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    background: #dc3545;
+    color: white;
+}
+
+.classification-protected {
+    display: inline-block;
+    padding: 3px 8px;
+    border-radius: 12px;
+    font-size: 10px;
+    font-weight: bold;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    background: #ffc107;
+    color: #212529;
+}
+
+/* Entry Link Styles */
+.entry-link {
+    color: #004C8E;
+    text-decoration: none;
+    font-weight: 500;
+    transition: color 0.3s;
+}
+
+.entry-link:hover {
+    color: #FC5000;
+    text-decoration: underline;
+}
+
+tr {
+    transition: background-color 0.3s;
+}
