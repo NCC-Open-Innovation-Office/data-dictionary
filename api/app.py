@@ -531,6 +531,102 @@ def remove_entry_link(entry_id, link_id):
         return jsonify({'error': str(e)}), 500
 
 
+@app.route('/api/entries/bulk-import', methods=['POST'])
+def bulk_import_entries():
+    """Bulk import entries from CSV data (for Excel restore functionality)"""
+    try:
+        data = request.json
+        entries = data.get('entries', [])
+        
+        if not entries:
+            return jsonify({'error': 'No entries provided'}), 400
+        
+        conn = get_db()
+        cursor = conn.cursor()
+        
+        imported = 0
+        updated = 0
+        skipped = 0
+        errors = []
+        
+        for entry in entries:
+            try:
+                term = entry.get('term', '').strip()
+                if not term:
+                    skipped += 1
+                    continue
+                
+                # Check if entry exists
+                cursor.execute('SELECT id FROM entries WHERE term = ?', (term,))
+                existing = cursor.fetchone()
+                
+                now = datetime.utcnow().isoformat()
+                
+                if existing:
+                    # Update existing entry
+                    cursor.execute('''
+                        UPDATE entries 
+                        SET definition = ?, abbreviation = ?, dataType = ?,
+                            inputFormat = ?, variations = ?, owner = ?,
+                            stewards = ?, classification = ?, discussion = ?,
+                            updatedAt = ?
+                        WHERE term = ?
+                    ''', (
+                        entry.get('definition', ''),
+                        entry.get('abbreviation', ''),
+                        entry.get('dataType', ''),
+                        entry.get('inputFormat', ''),
+                        entry.get('variations', ''),
+                        entry.get('owner', ''),
+                        entry.get('stewards', ''),
+                        entry.get('classification', 'public'),
+                        entry.get('discussion', ''),
+                        now,
+                        term
+                    ))
+                    updated += 1
+                else:
+                    # Insert new entry
+                    cursor.execute('''
+                        INSERT INTO entries (term, definition, abbreviation, dataType, 
+                                           inputFormat, variations, owner, stewards, 
+                                           classification, discussion, createdAt, updatedAt)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ''', (
+                        term,
+                        entry.get('definition', ''),
+                        entry.get('abbreviation', ''),
+                        entry.get('dataType', ''),
+                        entry.get('inputFormat', ''),
+                        entry.get('variations', ''),
+                        entry.get('owner', ''),
+                        entry.get('stewards', ''),
+                        entry.get('classification', 'public'),
+                        entry.get('discussion', ''),
+                        now,
+                        now
+                    ))
+                    imported += 1
+                    
+            except Exception as e:
+                errors.append(f"Error with term '{term}': {str(e)}")
+                skipped += 1
+        
+        conn.commit()
+        conn.close()
+        
+        return jsonify({
+            'message': 'Import completed',
+            'imported': imported,
+            'updated': updated,
+            'skipped': skipped,
+            'errors': errors
+        }), 200
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5001))
     app.run(host='0.0.0.0', port=port, debug=False)

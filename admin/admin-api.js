@@ -36,6 +36,8 @@ class DataDictionary {
         const filterType = document.getElementById('filter-type');
         const cancelBtn = document.getElementById('cancel-btn');
         const downloadExcelBtn = document.getElementById('download-excel-btn');
+        const uploadExcelBtn = document.getElementById('upload-excel-btn');
+        const excelFileInput = document.getElementById('excel-file-input');
         const historyBtn = document.getElementById('view-history-btn');
         const closeHistoryBtn = document.getElementById('close-history-btn');
         const closeDetailBtn = document.getElementById('close-detail-btn');
@@ -54,6 +56,8 @@ class DataDictionary {
         filterType.addEventListener('change', () => this.renderTable());
         cancelBtn.addEventListener('click', () => this.cancelEdit());
         downloadExcelBtn.addEventListener('click', () => this.downloadExcel());
+        uploadExcelBtn.addEventListener('click', () => excelFileInput.click());
+        excelFileInput.addEventListener('change', (e) => this.handleFileUpload(e));
         historyBtn.addEventListener('click', () => this.showHistory());
         closeHistoryBtn.addEventListener('click', () => this.hideHistory());
         closeDetailBtn.addEventListener('click', () => this.hideDetail());
@@ -535,6 +539,165 @@ class DataDictionary {
         link.download = `data-dictionary-${new Date().toISOString().split('T')[0]}.csv`;
         link.click();
         URL.revokeObjectURL(url);
+    }
+
+    async handleFileUpload(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+
+        // Check file type
+        const fileName = file.name.toLowerCase();
+        if (!fileName.endsWith('.csv') && !fileName.endsWith('.xlsx') && !fileName.endsWith('.xls')) {
+            alert('Please upload a CSV or Excel file');
+            return;
+        }
+
+        try {
+            const text = await file.text();
+            const entries = this.parseCSV(text);
+            
+            if (entries.length === 0) {
+                alert('No valid entries found in the file');
+                return;
+            }
+
+            const confirmed = confirm(
+                `Found ${entries.length} entries in the file.\n\n` +
+                `This will:\n` +
+                `• Add new entries that don't exist\n` +
+                `• Update existing entries with matching terms\n\n` +
+                `Do you want to proceed?`
+            );
+
+            if (!confirmed) {
+                event.target.value = ''; // Reset file input
+                return;
+            }
+
+            // Show loading indicator
+            const uploadBtn = document.getElementById('upload-excel-btn');
+            const originalText = uploadBtn.textContent;
+            uploadBtn.textContent = '⏳ Uploading...';
+            uploadBtn.disabled = true;
+
+            // Send to API
+            const response = await fetch(`${this.apiBase}/entries/bulk-import`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ entries })
+            });
+
+            if (!response.ok) {
+                throw new Error('Upload failed');
+            }
+
+            const result = await response.json();
+            
+            // Show results
+            let message = `Import completed!\n\n`;
+            message += `✅ New entries imported: ${result.imported}\n`;
+            message += `🔄 Existing entries updated: ${result.updated}\n`;
+            message += `⏭️  Entries skipped: ${result.skipped}\n`;
+            
+            if (result.errors && result.errors.length > 0) {
+                message += `\n⚠️ Errors:\n${result.errors.slice(0, 5).join('\n')}`;
+                if (result.errors.length > 5) {
+                    message += `\n... and ${result.errors.length - 5} more`;
+                }
+            }
+
+            alert(message);
+
+            // Reload data
+            await this.loadData();
+            this.renderTable();
+
+            // Reset button and file input
+            uploadBtn.textContent = originalText;
+            uploadBtn.disabled = false;
+            event.target.value = '';
+
+        } catch (error) {
+            console.error('Upload error:', error);
+            alert('Error uploading file: ' + error.message);
+            
+            // Reset button
+            const uploadBtn = document.getElementById('upload-excel-btn');
+            uploadBtn.textContent = '📤 Upload Excel';
+            uploadBtn.disabled = false;
+            event.target.value = '';
+        }
+    }
+
+    parseCSV(text) {
+        const lines = text.split('\n').filter(line => line.trim());
+        if (lines.length < 2) return [];
+
+        // Parse header
+        const headers = this.parseCSVLine(lines[0]);
+        const entries = [];
+
+        // Map header positions
+        const headerMap = {};
+        headers.forEach((header, index) => {
+            const normalized = header.toLowerCase().trim();
+            headerMap[normalized] = index;
+        });
+
+        // Parse data rows
+        for (let i = 1; i < lines.length; i++) {
+            const values = this.parseCSVLine(lines[i]);
+            
+            const entry = {
+                term: values[headerMap['term']] || '',
+                definition: values[headerMap['definition']] || '',
+                abbreviation: values[headerMap['abbreviation']] || '',
+                dataType: values[headerMap['data type']] || '',
+                inputFormat: values[headerMap['input format']] || '',
+                variations: values[headerMap['variations']] || '',
+            };
+
+            // Only add if term exists
+            if (entry.term && entry.term.trim()) {
+                entries.push(entry);
+            }
+        }
+
+        return entries;
+    }
+
+    parseCSVLine(line) {
+        const result = [];
+        let current = '';
+        let inQuotes = false;
+
+        for (let i = 0; i < line.length; i++) {
+            const char = line[i];
+            const nextChar = line[i + 1];
+
+            if (char === '"') {
+                if (inQuotes && nextChar === '"') {
+                    // Escaped quote
+                    current += '"';
+                    i++; // Skip next quote
+                } else {
+                    // Toggle quotes
+                    inQuotes = !inQuotes;
+                }
+            } else if (char === ',' && !inQuotes) {
+                // End of field
+                result.push(current.trim());
+                current = '';
+            } else {
+                current += char;
+            }
+        }
+
+        // Add last field
+        result.push(current.trim());
+        return result;
     }
 
     escapeCsv(text) {
