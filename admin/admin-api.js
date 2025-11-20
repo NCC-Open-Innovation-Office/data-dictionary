@@ -632,39 +632,96 @@ class DataDictionary {
     }
 
     parseCSV(text) {
-        const lines = text.split('\n').filter(line => line.trim());
-        if (lines.length < 2) return [];
-
-        // Parse header
-        const headers = this.parseCSVLine(lines[0]);
+        // Parse CSV properly handling quoted fields with newlines
+        const rows = [];
+        let currentRow = [];
+        let currentField = '';
+        let inQuotes = false;
+        
+        for (let i = 0; i < text.length; i++) {
+            const char = text[i];
+            const nextChar = text[i + 1];
+            
+            if (char === '"') {
+                if (inQuotes && nextChar === '"') {
+                    // Escaped quote
+                    currentField += '"';
+                    i++; // Skip next quote
+                } else {
+                    // Toggle quotes
+                    inQuotes = !inQuotes;
+                }
+            } else if (char === ',' && !inQuotes) {
+                // End of field
+                currentRow.push(currentField.trim());
+                currentField = '';
+            } else if ((char === '\n' || char === '\r') && !inQuotes) {
+                // End of row
+                if (currentField || currentRow.length > 0) {
+                    currentRow.push(currentField.trim());
+                    if (currentRow.some(field => field)) { // Only add non-empty rows
+                        rows.push(currentRow);
+                    }
+                    currentRow = [];
+                    currentField = '';
+                }
+                // Skip \r\n combination
+                if (char === '\r' && nextChar === '\n') {
+                    i++;
+                }
+            } else if (char !== '\r') { // Skip standalone \r
+                currentField += char;
+            }
+        }
+        
+        // Add last field and row if exists
+        if (currentField || currentRow.length > 0) {
+            currentRow.push(currentField.trim());
+            if (currentRow.some(field => field)) {
+                rows.push(currentRow);
+            }
+        }
+        
+        if (rows.length < 2) return [];
+        
+        // First row is headers
+        const headers = rows[0];
         const entries = [];
-
+        
         // Map header positions
         const headerMap = {};
         headers.forEach((header, index) => {
             const normalized = header.toLowerCase().trim();
             headerMap[normalized] = index;
         });
-
+        
         // Parse data rows
-        for (let i = 1; i < lines.length; i++) {
-            const values = this.parseCSVLine(lines[i]);
+        for (let i = 1; i < rows.length; i++) {
+            const values = rows[i];
+            
+            // Get values with fallbacks
+            const term = values[headerMap['term']] || '';
+            const definition = values[headerMap['definition']] || '';
+            const abbreviation = values[headerMap['abbreviation']] || '';
+            const dataType = values[headerMap['data type']] || '';
+            const inputFormat = values[headerMap['input format']] || '';
+            const variations = values[headerMap['variations']] || '';
             
             const entry = {
-                term: values[headerMap['term']] || '',
-                definition: values[headerMap['definition']] || '',
-                abbreviation: values[headerMap['abbreviation']] || '',
-                dataType: values[headerMap['data type']] || '',
-                inputFormat: values[headerMap['input format']] || '',
-                variations: values[headerMap['variations']] || '',
+                term: term,
+                definition: definition,
+                abbreviation: abbreviation,
+                dataType: dataType,
+                inputFormat: inputFormat,
+                variations: variations,
             };
-
+            
             // Only add if term exists
             if (entry.term && entry.term.trim()) {
                 entries.push(entry);
             }
         }
-
+        
         return entries;
     }
 
