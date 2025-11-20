@@ -519,12 +519,12 @@ class DataDictionary {
 
         this.entries.forEach(entry => {
             const row = [
-                this.escapeCsv(entry.term),
-                this.escapeCsv(entry.definition),
-                this.escapeCsv(entry.abbreviation || ''),
+                this.escapeCsv(this.normalizeNewlines(entry.term)),
+                this.escapeCsv(this.normalizeNewlines(entry.definition)),
+                this.escapeCsv(this.normalizeNewlines(entry.abbreviation || '')),
                 this.escapeCsv(entry.dataType || ''),
-                this.escapeCsv(entry.inputFormat || ''),
-                this.escapeCsv(entry.variations || ''),
+                this.escapeCsv(this.normalizeNewlines(entry.inputFormat || '')),
+                this.escapeCsv(this.normalizeNewlines(entry.variations || '')),
                 this.escapeCsv(entry.createdAt ? new Date(entry.createdAt).toLocaleString() : ''),
                 this.escapeCsv(entry.updatedAt ? new Date(entry.updatedAt).toLocaleString() : '')
             ];
@@ -539,6 +539,12 @@ class DataDictionary {
         link.download = `data-dictionary-${new Date().toISOString().split('T')[0]}.csv`;
         link.click();
         URL.revokeObjectURL(url);
+    }
+
+    normalizeNewlines(text) {
+        if (!text) return '';
+        // Replace newlines with space + pipe + space for better CSV compatibility
+        return text.replace(/\r?\n/g, ' | ');
     }
 
     async handleFileUpload(event) {
@@ -699,13 +705,13 @@ class DataDictionary {
         for (let i = 1; i < rows.length; i++) {
             const values = rows[i];
             
-            // Get values with fallbacks
-            const term = values[headerMap['term']] || '';
-            const definition = values[headerMap['definition']] || '';
-            const abbreviation = values[headerMap['abbreviation']] || '';
+            // Get values with fallbacks and denormalize newlines
+            const term = this.denormalizeNewlines(values[headerMap['term']] || '');
+            const definition = this.denormalizeNewlines(values[headerMap['definition']] || '');
+            const abbreviation = this.denormalizeNewlines(values[headerMap['abbreviation']] || '');
             const dataType = values[headerMap['data type']] || '';
-            const inputFormat = values[headerMap['input format']] || '';
-            const variations = values[headerMap['variations']] || '';
+            const inputFormat = this.denormalizeNewlines(values[headerMap['input format']] || '');
+            const variations = this.denormalizeNewlines(values[headerMap['variations']] || '');
             
             const entry = {
                 term: term,
@@ -723,6 +729,12 @@ class DataDictionary {
         }
         
         return entries;
+    }
+
+    denormalizeNewlines(text) {
+        if (!text) return '';
+        // Convert pipe separators back to newlines
+        return text.replace(/ \| /g, '\n');
     }
 
     parseCSVLine(line) {
