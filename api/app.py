@@ -9,6 +9,7 @@ app = Flask(__name__)
 CORS(app)  # Enable CORS for frontend access
 
 DATABASE = os.environ.get('DATABASE', 'dictionary.db')
+ALLOW_DD_ID_EDIT = os.environ.get('ALLOW_DD_ID_EDIT', 'false').lower() == 'true'
 
 def get_db():
     """Create a database connection"""
@@ -53,6 +54,11 @@ def init_db():
     
     try:
         cursor.execute('ALTER TABLE entries ADD COLUMN classification TEXT DEFAULT "public"')
+    except sqlite3.OperationalError:
+        pass
+    
+    try:
+        cursor.execute('ALTER TABLE entries ADD COLUMN ddId TEXT')
     except sqlite3.OperationalError:
         pass
     
@@ -114,6 +120,13 @@ init_db()
 def health_check():
     """Health check endpoint"""
     return jsonify({'status': 'ok', 'message': 'API is running'})
+
+@app.route('/api/config', methods=['GET'])
+def get_config():
+    """Get application configuration"""
+    return jsonify({
+        'allowDdIdEdit': ALLOW_DD_ID_EDIT
+    })
 
 @app.route('/api/entries', methods=['GET'])
 def get_entries():
@@ -182,8 +195,8 @@ def create_entry():
         cursor.execute('''
             INSERT INTO entries (term, definition, abbreviation, dataType, 
                                inputFormat, variations, owner, stewards, 
-                               classification, discussion, createdAt, updatedAt)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                               classification, discussion, ddId, createdAt, updatedAt)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', (
             data['term'],
             data['definition'],
@@ -195,6 +208,7 @@ def create_entry():
             data.get('stewards', ''),
             data.get('classification', 'public'),
             data.get('discussion', ''),
+            data.get('ddId', '') if ALLOW_DD_ID_EDIT else '',
             now,
             now
         ))
@@ -247,7 +261,7 @@ def update_entry(entry_id):
             UPDATE entries
             SET term = ?, definition = ?, abbreviation = ?, dataType = ?, 
                 inputFormat = ?, variations = ?, owner = ?, stewards = ?,
-                classification = ?, discussion = ?, updatedAt = ?
+                classification = ?, discussion = ?, ddId = ?, updatedAt = ?
             WHERE id = ?
         ''', (
             data['term'],
@@ -260,6 +274,7 @@ def update_entry(entry_id):
             data.get('stewards', ''),
             data.get('classification', 'public'),
             data.get('discussion', ''),
+            data.get('ddId', old_data.get('ddId', '')) if ALLOW_DD_ID_EDIT else old_data.get('ddId', ''),
             now,
             entry_id
         ))

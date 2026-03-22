@@ -7,6 +7,7 @@ class DataDictionary {
         this.tags = [];
         this.currentEntryTags = [];
         this.currentEntryLinks = [];
+        this.allowDdIdEdit = false; // Configuration from API
         // API URL configuration for both local and Docker environments
         const isLocalDev = window.location.port === '8000' && window.location.hostname === 'localhost';
         this.apiBase = isLocalDev ? 'http://localhost:5001/api' : '/api';
@@ -14,12 +15,18 @@ class DataDictionary {
     }
 
     async init() {
+        // Load configuration first
+        await this.loadConfig();
+        
         // Load data from API
         await this.loadData();
         await this.loadChangeHistory();
         await this.loadTags();
         await this.loadOwners();
         await this.loadStewards();
+        
+        // Apply DD ID field configuration
+        this.configureDdIdField();
         
         // Bind event listeners
         this.bindEvents();
@@ -83,6 +90,14 @@ class DataDictionary {
             user: 'Admin'  // Will be replaced with Cloudflare Access user
         };
 
+        // Include ddId only if editing is allowed
+        if (this.allowDdIdEdit) {
+            const ddId = document.getElementById('ddId').value.trim();
+            if (ddId) {
+                formData.ddId = ddId;
+            }
+        }
+
         try {
             let entryId;
             
@@ -143,6 +158,7 @@ class DataDictionary {
         this.editingIndex = index;
 
         // Populate form
+        document.getElementById('ddId').value = entry.ddId || '';
         document.getElementById('term').value = entry.term;
         document.getElementById('definition').value = entry.definition;
         document.getElementById('abbreviation').value = entry.abbreviation || '';
@@ -265,6 +281,7 @@ class DataDictionary {
             }
             
             row.innerHTML = `
+                <td>${entry.ddId ? `<span class="badge" style="background-color: #6c757d; font-family: monospace;">${this.escapeHtml(entry.ddId)}</span>` : '<span class="text-muted">—</span>'}</td>
                 <td>
                     <strong>${this.escapeHtml(entry.term)}</strong>
                     ${tagsHtml ? `<div style="margin-top: 5px;">${tagsHtml}</div>` : ''}
@@ -293,6 +310,46 @@ class DataDictionary {
         const div = document.createElement('div');
         div.textContent = text;
         return div.innerHTML;
+    }
+
+    async loadConfig() {
+        try {
+            const response = await fetch(`${this.apiBase}/config`);
+            if (!response.ok) throw new Error('Failed to load config');
+            const config = await response.json();
+            this.allowDdIdEdit = config.allowDdIdEdit || false;
+            console.log(`DD ID editing is ${this.allowDdIdEdit ? 'enabled' : 'disabled'}`);
+        } catch (error) {
+            console.error('Error loading config:', error);
+            this.allowDdIdEdit = false; // Default to disabled on error
+        }
+    }
+
+    configureDdIdField() {
+        const ddIdField = document.getElementById('ddId');
+        if (ddIdField) {
+            if (this.allowDdIdEdit) {
+                ddIdField.removeAttribute('readonly');
+                ddIdField.style.backgroundColor = '';
+                ddIdField.style.cursor = '';
+                ddIdField.placeholder = 'e.g., DD1';
+                const helpText = ddIdField.parentElement.querySelector('small');
+                if (helpText) {
+                    helpText.textContent = '⚠️ DD ID editing is enabled - use with caution';
+                    helpText.style.color = '#d97706';
+                }
+            } else {
+                ddIdField.setAttribute('readonly', 'readonly');
+                ddIdField.style.backgroundColor = '#f5f5f5';
+                ddIdField.style.cursor = 'not-allowed';
+                ddIdField.placeholder = 'Auto-assigned';
+                const helpText = ddIdField.parentElement.querySelector('small');
+                if (helpText) {
+                    helpText.textContent = 'DD IDs can only be modified directly in the database';
+                    helpText.style.color = '#666';
+                }
+            }
+        }
     }
 
     async loadData() {

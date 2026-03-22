@@ -28,6 +28,8 @@ services:
     environment:
       - PORT=5001
       - DATABASE=/app/data/dictionary.db
+      # Set to 'true' to allow DD ID editing in admin panel (disabled by default for safety)
+      # - ALLOW_DD_ID_EDIT=true
     networks:
       - dictionary-network
     restart: unless-stopped
