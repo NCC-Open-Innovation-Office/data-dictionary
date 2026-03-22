@@ -270,6 +270,35 @@ th {
     letter-spacing: 0.5px;
 }
 
+th.sortable {
+    cursor: pointer;
+    user-select: none;
+    position: relative;
+    padding-right: 30px;
+}
+
+th.sortable:hover {
+    background: #003d73;
+}
+
+th.sortable::after {
+    content: '⇅';
+    position: absolute;
+    right: 10px;
+    opacity: 0.3;
+    font-size: 12px;
+}
+
+th.sortable.sort-asc::after {
+    content: '▲';
+    opacity: 1;
+}
+
+th.sortable.sort-desc::after {
+    content: '▼';
+    opacity: 1;
+}
+
 td {
     padding: 15px;
     border-bottom: 1px solid #dddddd;
