@@ -609,6 +609,9 @@ class DataDictionary {
         const file = event.target.files[0];
         if (!file) return;
 
+        console.log('[DEBUG] File upload started');
+        alert('DEBUG: Starting file upload - check console for details');
+
         // Check file type
         const fileName = file.name.toLowerCase();
         if (!fileName.endsWith('.csv') && !fileName.endsWith('.xlsx') && !fileName.endsWith('.xls')) {
@@ -619,6 +622,12 @@ class DataDictionary {
         try {
             const text = await file.text();
             const entries = this.parseCSV(text);
+            
+            // DEBUG: Show what was parsed
+            if (entries.length > 0) {
+                const first = entries[0];
+                alert(`DEBUG: Parsed ${entries.length} entries\n\nFirst entry:\nDD ID: "${first.ddId}"\nTerm: "${first.term}"\nDefinition: "${first.definition.substring(0, 50)}..."`);
+            }
             
             if (entries.length === 0) {
                 alert('No valid entries found in the file');
