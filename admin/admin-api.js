@@ -73,6 +73,12 @@ class DataDictionary {
         closeTagModalBtn.addEventListener('click', () => this.hideTagManagement());
         createTagBtn.addEventListener('click', () => this.createTag());
         addLinkBtn.addEventListener('click', () => this.addLinkToEntry());
+        
+        // TEMPORARY: Reset database button - REMOVE BEFORE PRODUCTION
+        const resetDbBtn = document.getElementById('reset-database-btn');
+        if (resetDbBtn) {
+            resetDbBtn.addEventListener('click', () => this.resetDatabase());
+        }
     }
 
     async handleSubmit() {
@@ -597,6 +603,46 @@ class DataDictionary {
         link.download = `data-dictionary-${new Date().toISOString().split('T')[0]}.csv`;
         link.click();
         URL.revokeObjectURL(url);
+    }
+
+    // TEMPORARY: Reset database method - REMOVE BEFORE PRODUCTION
+    async resetDatabase() {
+        const confirmMessage = 'WARNING: This will DELETE ALL ENTRIES from the database!\n\n' +
+                             'This action cannot be undone.\n\n' +
+                             'After resetting, you can upload a backup CSV to restore your data.\n\n' +
+                             'Type "DELETE ALL" to confirm:';
+        
+        const confirmation = prompt(confirmMessage);
+        
+        if (confirmation !== 'DELETE ALL') {
+            if (confirmation !== null) {
+                alert('Reset cancelled. You must type "DELETE ALL" exactly to confirm.');
+            }
+            return;
+        }
+        
+        try {
+            const response = await fetch(`${this.apiBase}/entries/reset-database`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' }
+            });
+            
+            if (!response.ok) {
+                const error = await response.json();
+                throw new Error(error.error || 'Failed to reset database');
+            }
+            
+            const result = await response.json();
+            alert(result.message + '\n\nYou can now upload a backup CSV file to restore your data.');
+            
+            // Reload the page to reflect empty database
+            await this.loadData();
+            this.renderTable();
+            
+        } catch (error) {
+            console.error('Error resetting database:', error);
+            alert('Error resetting database: ' + error.message);
+        }
     }
 
     normalizeNewlines(text) {

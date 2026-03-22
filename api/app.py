@@ -644,6 +644,34 @@ def bulk_import_entries():
         return jsonify({'error': str(e)}), 500
 
 
+# TEMPORARY: Database reset endpoint - REMOVE BEFORE PRODUCTION
+@app.route('/api/entries/reset-database', methods=['POST'])
+def reset_database():
+    """TEMPORARY: Clear all entries from the database (for troubleshooting corrupted data)"""
+    try:
+        conn = get_db()
+        cursor = conn.cursor()
+        
+        # Delete all entries (this will cascade to related tables due to foreign keys)
+        cursor.execute('DELETE FROM entry_tags')
+        cursor.execute('DELETE FROM entry_links')
+        cursor.execute('DELETE FROM entries')
+        cursor.execute('DELETE FROM change_history')
+        
+        # Reset the auto-increment counter
+        cursor.execute("DELETE FROM sqlite_sequence WHERE name='entries'")
+        
+        conn.commit()
+        conn.close()
+        
+        return jsonify({
+            'message': 'Database reset successfully. All entries have been deleted.'
+        }), 200
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5001))
     app.run(host='0.0.0.0', port=port, debug=False)
