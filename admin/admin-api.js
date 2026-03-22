@@ -763,6 +763,7 @@ class DataDictionary {
             const values = rows[i];
             
             // Get values with fallbacks and denormalize newlines
+            const ddId = values[headerMap['dd id']] || '';
             const term = this.denormalizeNewlines(values[headerMap['term']] || '');
             const definition = this.denormalizeNewlines(values[headerMap['definition']] || '');
             const abbreviation = this.denormalizeNewlines(values[headerMap['abbreviation']] || '');
@@ -771,6 +772,7 @@ class DataDictionary {
             const variations = this.denormalizeNewlines(values[headerMap['variations']] || '');
             
             const entry = {
+                ddId: ddId,
                 term: term,
                 definition: definition,
                 abbreviation: abbreviation,

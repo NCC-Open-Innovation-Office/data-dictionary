@@ -584,7 +584,7 @@ def bulk_import_entries():
                         SET definition = ?, abbreviation = ?, dataType = ?,
                             inputFormat = ?, variations = ?, owner = ?,
                             stewards = ?, classification = ?, discussion = ?,
-                            updatedAt = ?
+                            ddId = ?, updatedAt = ?
                         WHERE term = ?
                     ''', (
                         entry.get('definition', ''),
@@ -596,6 +596,7 @@ def bulk_import_entries():
                         entry.get('stewards', ''),
                         entry.get('classification', 'public'),
                         entry.get('discussion', ''),
+                        entry.get('ddId', ''),
                         now,
                         term
                     ))
@@ -605,8 +606,8 @@ def bulk_import_entries():
                     cursor.execute('''
                         INSERT INTO entries (term, definition, abbreviation, dataType, 
                                            inputFormat, variations, owner, stewards, 
-                                           classification, discussion, createdAt, updatedAt)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                           classification, discussion, ddId, createdAt, updatedAt)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     ''', (
                         term,
                         entry.get('definition', ''),
@@ -618,6 +619,7 @@ def bulk_import_entries():
                         entry.get('stewards', ''),
                         entry.get('classification', 'public'),
                         entry.get('discussion', ''),
+                        entry.get('ddId', ''),
                         now,
                         now
                     ))
