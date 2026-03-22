@@ -8,6 +8,8 @@ class DataDictionary {
         this.currentEntryTags = [];
         this.currentEntryLinks = [];
         this.allowDdIdEdit = false; // Configuration from API
+        this.sortColumn = 'term'; // Default sort column
+        this.sortDirection = 'asc'; // Default sort direction (asc or desc)
         // API URL configuration for both local and Docker environments
         const isLocalDev = window.location.port === '8000' && window.location.hostname === 'localhost';
         this.apiBase = isLocalDev ? 'http://localhost:5001/api' : '/api';
@@ -59,8 +61,14 @@ class DataDictionary {
             this.handleSubmit();
         });
 
-        searchInput.addEventListener('input', () => this.renderTable());
-        filterType.addEventListener('change', () => this.renderTable());
+        searchInput.addEventListener('input', () => {
+            this.saveFilterState();
+            this.renderTable();
+        });
+        filterType.addEventListener('change', () => {
+            this.saveFilterState();
+            this.renderTable();
+        });
         cancelBtn.addEventListener('click', () => this.cancelEdit());
         downloadExcelBtn.addEventListener('click', () => this.downloadExcel());
         uploadExcelBtn.addEventListener('click', () => excelFileInput.click());
@@ -73,6 +81,41 @@ class DataDictionary {
         closeTagModalBtn.addEventListener('click', () => this.hideTagManagement());
         createTagBtn.addEventListener('click', () => this.createTag());
         addLinkBtn.addEventListener('click', () => this.addLinkToEntry());
+        
+        // TEMPORARY: Reset database button - REMOVE BEFORE PRODUCTION
+        const resetDbBtn = document.getElementById('reset-database-btn');
+        console.log('Reset button element:', resetDbBtn);
+        if (resetDbBtn) {
+            console.log('Attaching event listener to reset button');
+            resetDbBtn.addEventListener('click', () => {
+                console.log('Reset button clicked!');
+                this.resetDatabase();
+            });
+        } else {
+            console.error('Reset database button not found in DOM');
+        }
+        
+        // Add event listeners for sortable column headers
+        document.querySelectorAll('.sortable').forEach(th => {
+            th.addEventListener('click', () => {
+                const sortColumn = th.getAttribute('data-sort');
+                if (sortColumn) {
+                    this.setSortColumn(sortColumn);
+                }
+            });
+        });
+        
+        // Initialize sort indicators
+        this.updateSortIndicators();
+        
+        // Clear filters button
+        const clearFiltersBtn = document.getElementById('clear-filters-btn');
+        if (clearFiltersBtn) {
+            clearFiltersBtn.addEventListener('click', () => this.clearFilters());
+        }
+        
+        // Load saved filter state
+        this.loadFilterState();
     }
 
     async handleSubmit() {
@@ -239,7 +282,7 @@ class DataDictionary {
         const searchTerm = document.getElementById('search-input').value.toLowerCase();
         const filterType = document.getElementById('filter-type').value;
 
-        return this.entries.filter(entry => {
+        let filtered = this.entries.filter(entry => {
             // Search filter
             const matchesSearch = !searchTerm || 
                 entry.term.toLowerCase().includes(searchTerm) ||
@@ -252,6 +295,125 @@ class DataDictionary {
 
             return matchesSearch && matchesType;
         });
+
+        // Apply sorting
+        return this.sortEntries(filtered);
+    }
+
+    sortEntries(entries) {
+        return entries.sort((a, b) => {
+            let aVal, bVal;
+            
+            // Get values based on sort column
+            switch (this.sortColumn) {
+                case 'ddId':
+                    aVal = a.ddId || '';
+                    bVal = b.ddId || '';
+                    // Natural sort for DD IDs (e.g., DD2, DD10, DD100)
+                    const aNum = parseInt((aVal.match(/\d+/) || ['0'])[0]);
+                    const bNum = parseInt((bVal.match(/\d+/) || ['0'])[0]);
+                    return this.sortDirection === 'asc' ? aNum - bNum : bNum - aNum;
+                case 'term':
+                    aVal = a.term.toLowerCase();
+                    bVal = b.term.toLowerCase();
+                    break;
+                case 'abbreviation':
+                    aVal = (a.abbreviation || '').toLowerCase();
+                    bVal = (b.abbreviation || '').toLowerCase();
+                    break;
+                case 'dataType':
+                    aVal = (a.dataType || '').toLowerCase();
+                    bVal = (b.dataType || '').toLowerCase();
+                    break;
+                case 'owner':
+                    aVal = (a.owner || '').toLowerCase();
+                    bVal = (b.owner || '').toLowerCase();
+                    break;
+                case 'classification':
+                    aVal = (a.classification || '').toLowerCase();
+                    bVal = (b.classification || '').toLowerCase();
+                    break;
+                default:
+                    aVal = '';
+                    bVal = '';
+            }
+            
+            // Compare values
+            if (aVal < bVal) return this.sortDirection === 'asc' ? -1 : 1;
+            if (aVal > bVal) return this.sortDirection === 'asc' ? 1 : -1;
+            return 0;
+        });
+    }
+
+    setSortColumn(column) {
+        // Toggle direction if same column, otherwise reset to ascending
+        if (this.sortColumn === column) {
+            this.sortDirection = this.sortDirection === 'asc' ? 'desc' : 'asc';
+        } else {
+            this.sortColumn = column;
+            this.sortDirection = 'asc';
+        }
+        this.updateSortIndicators();
+        this.renderTable();
+    }
+
+    updateSortIndicators() {
+        // Remove all sort indicators
+        document.querySelectorAll('.sortable').forEach(th => {
+            th.classList.remove('sort-asc', 'sort-desc');
+        });
+        
+        // Add indicator to current sort column
+        const currentHeader = document.querySelector(`[data-sort="${this.sortColumn}"]`);
+        if (currentHeader) {
+            currentHeader.classList.add(this.sortDirection === 'asc' ? 'sort-asc' : 'sort-desc');
+        }
+    }
+
+    saveFilterState() {
+        const searchInput = document.getElementById('search-input');
+        const filterType = document.getElementById('filter-type');
+        
+        const filterState = {
+            searchTerm: searchInput.value,
+            dataType: filterType.value
+        };
+        
+        localStorage.setItem('dataDictionary_filters', JSON.stringify(filterState));
+    }
+
+    loadFilterState() {
+        try {
+            const saved = localStorage.getItem('dataDictionary_filters');
+            if (saved) {
+                const filterState = JSON.parse(saved);
+                const searchInput = document.getElementById('search-input');
+                const filterType = document.getElementById('filter-type');
+                
+                if (filterState.searchTerm) {
+                    searchInput.value = filterState.searchTerm;
+                }
+                if (filterState.dataType) {
+                    filterType.value = filterState.dataType;
+                }
+                
+                // Re-render table with loaded filters
+                this.renderTable();
+            }
+        } catch (error) {
+            console.error('Error loading filter state:', error);
+        }
+    }
+
+    clearFilters() {
+        const searchInput = document.getElementById('search-input');
+        const filterType = document.getElementById('filter-type');
+        
+        searchInput.value = '';
+        filterType.value = '';
+        
+        localStorage.removeItem('dataDictionary_filters');
+        this.renderTable();
     }
 
     renderTable() {
@@ -597,6 +759,47 @@ class DataDictionary {
         link.download = `data-dictionary-${new Date().toISOString().split('T')[0]}.csv`;
         link.click();
         URL.revokeObjectURL(url);
+    }
+
+    // TEMPORARY: Reset database method - REMOVE BEFORE PRODUCTION
+    async resetDatabase() {
+        console.log('Reset database function called');
+        const confirmMessage = 'WARNING: This will DELETE ALL ENTRIES from the database!\n\n' +
+                             'This action cannot be undone.\n\n' +
+                             'After resetting, you can upload a backup CSV to restore your data.\n\n' +
+                             'Type "DELETE ALL" to confirm:';
+        
+        const confirmation = prompt(confirmMessage);
+        
+        if (confirmation !== 'DELETE ALL') {
+            if (confirmation !== null) {
+                alert('Reset cancelled. You must type "DELETE ALL" exactly to confirm.');
+            }
+            return;
+        }
+        
+        try {
+            const response = await fetch(`${this.apiBase}/entries/reset-database`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' }
+            });
+            
+            if (!response.ok) {
+                const error = await response.json();
+                throw new Error(error.error || 'Failed to reset database');
+            }
+            
+            const result = await response.json();
+            alert(result.message + '\n\nYou can now upload a backup CSV file to restore your data.');
+            
+            // Reload the page to reflect empty database
+            await this.loadData();
+            this.renderTable();
+            
+        } catch (error) {
+            console.error('Error resetting database:', error);
+            alert('Error resetting database: ' + error.message);
+        }
     }
 
     normalizeNewlines(text) {

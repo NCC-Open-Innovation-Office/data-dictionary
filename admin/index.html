@@ -143,6 +143,10 @@
                 <div class="search-header">
                     <h2>Dictionary Entries</h2>
                     <div class="header-buttons">
+                        <!-- TEMPORARY: Reset button for troubleshooting - REMOVE BEFORE PRODUCTION -->
+                        <button id="reset-database-btn" class="btn btn-small" style="background-color: #dc3545; color: white;">
+                            ⚠️ Reset Database
+                        </button>
                         <button id="view-history-btn" class="btn btn-secondary btn-small">
                             📋 View Change History
                         </button>
@@ -171,6 +175,7 @@
                         <option value="JSON">JSON</option>
                         <option value="Other">Other</option>
                     </select>
+                    <button id="clear-filters-btn" class="btn btn-secondary btn-small" style="margin-left: 10px;">✖ Clear Filters</button>
                 </div>
             </section>
 
@@ -180,16 +185,16 @@
                     <table id="dictionary-table">
                         <thead>
                             <tr>
-                                <th>DD ID</th>
-                                <th>Term</th>
+                                <th class="sortable" data-sort="ddId">DD ID</th>
+                                <th class="sortable" data-sort="term">Term</th>
                                 <th>Definition</th>
-                                <th>Abbreviation</th>
-                                <th>Data Type</th>
+                                <th class="sortable" data-sort="abbreviation">Abbreviation</th>
+                                <th class="sortable" data-sort="dataType">Data Type</th>
                                 <th>Input Format</th>
                                 <th>Variations</th>
-                                <th>Owner</th>
+                                <th class="sortable" data-sort="owner">Owner</th>
                                 <th>Stewards</th>
-                                <th>Classification</th>
+                                <th class="sortable" data-sort="classification">Classification</th>
                                 <th>Actions</th>
                             </tr>
                         </thead>
@@ -275,6 +280,6 @@
         </footer>
     </div>
 
-    <script src="admin-api.js"></script>
+    <script src="admin-api.js?v=2.0"></script>
 </body>
 </html>
