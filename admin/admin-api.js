@@ -571,11 +571,12 @@ class DataDictionary {
 
     downloadExcel() {
         // Create CSV data (Excel can open CSV files)
-        const headers = ['Term', 'Definition', 'Abbreviation', 'Data Type', 'Input Format', 'Variations', 'Created At', 'Updated At'];
+        const headers = ['DD ID', 'Term', 'Definition', 'Abbreviation', 'Data Type', 'Input Format', 'Variations', 'Created At', 'Updated At'];
         const csvRows = [headers.join(',')];
 
         this.entries.forEach(entry => {
             const row = [
+                this.escapeCsv(entry.ddId || ''),
                 this.escapeCsv(this.normalizeNewlines(entry.term)),
                 this.escapeCsv(this.normalizeNewlines(entry.definition)),
                 this.escapeCsv(this.normalizeNewlines(entry.abbreviation || '')),
