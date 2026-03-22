@@ -76,8 +76,15 @@ class DataDictionary {
         
         // TEMPORARY: Reset database button - REMOVE BEFORE PRODUCTION
         const resetDbBtn = document.getElementById('reset-database-btn');
+        console.log('Reset button element:', resetDbBtn);
         if (resetDbBtn) {
-            resetDbBtn.addEventListener('click', () => this.resetDatabase());
+            console.log('Attaching event listener to reset button');
+            resetDbBtn.addEventListener('click', () => {
+                console.log('Reset button clicked!');
+                this.resetDatabase();
+            });
+        } else {
+            console.error('Reset database button not found in DOM');
         }
     }
 
@@ -607,6 +614,7 @@ class DataDictionary {
 
     // TEMPORARY: Reset database method - REMOVE BEFORE PRODUCTION
     async resetDatabase() {
+        console.log('Reset database function called');
         const confirmMessage = 'WARNING: This will DELETE ALL ENTRIES from the database!\n\n' +
                              'This action cannot be undone.\n\n' +
                              'After resetting, you can upload a backup CSV to restore your data.\n\n' +
