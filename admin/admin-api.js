@@ -609,9 +609,6 @@ class DataDictionary {
         const file = event.target.files[0];
         if (!file) return;
 
-        console.log('[DEBUG] File upload started');
-        alert('DEBUG: Starting file upload - check console for details');
-
         // Check file type
         const fileName = file.name.toLowerCase();
         if (!fileName.endsWith('.csv') && !fileName.endsWith('.xlsx') && !fileName.endsWith('.xls')) {
@@ -622,12 +619,6 @@ class DataDictionary {
         try {
             const text = await file.text();
             const entries = this.parseCSV(text);
-            
-            // DEBUG: Show what was parsed
-            if (entries.length > 0) {
-                const first = entries[0];
-                alert(`DEBUG: Parsed ${entries.length} entries\n\nFirst entry:\nDD ID: "${first.ddId}"\nTerm: "${first.term}"\nDefinition: "${first.definition.substring(0, 50)}..."`);
-            }
             
             if (entries.length === 0) {
                 alert('No valid entries found in the file');
@@ -706,8 +697,6 @@ class DataDictionary {
 
     parseCSV(text) {
         // Parse CSV properly handling quoted fields with newlines
-        console.log('[DEBUG] parseCSV called, text length:', text.length);
-        console.log('[DEBUG] First 200 chars:', text.substring(0, 200));
         const rows = [];
         let currentRow = [];
         let currentField = '';
@@ -761,8 +750,6 @@ class DataDictionary {
         
         // First row is headers
         const headers = rows[0];
-        console.log('[DEBUG] Headers:', headers);
-        console.log('[DEBUG] Header count:', headers.length);
         const entries = [];
         
         // Map header positions
@@ -770,14 +757,11 @@ class DataDictionary {
         headers.forEach((header, index) => {
             const normalized = header.toLowerCase().trim();
             headerMap[normalized] = index;
-            console.log(`[DEBUG] Header mapping: "${header}" -> "${normalized}" = index ${index}`);
         });
         
         // Parse data rows
         for (let i = 1; i < rows.length; i++) {
             const values = rows[i];
-            console.log(`[DEBUG] Row ${i} values:`, values);
-            console.log(`[DEBUG] Row ${i} value count:`, values.length);
             
             // Get values with fallbacks and denormalize newlines
             const ddId = values[headerMap['dd id']] || '';
@@ -787,8 +771,6 @@ class DataDictionary {
             const dataType = values[headerMap['data type']] || '';
             const inputFormat = this.denormalizeNewlines(values[headerMap['input format']] || '');
             const variations = this.denormalizeNewlines(values[headerMap['variations']] || '');
-            
-            console.log(`[DEBUG] Row ${i} parsed - ddId: "${ddId}", term: "${term.substring(0, 30)}...", def: "${definition.substring(0, 30)}..."`);
             
             const entry = {
                 ddId: ddId,
@@ -804,11 +786,6 @@ class DataDictionary {
             if (entry.term && entry.term.trim()) {
                 entries.push(entry);
             }
-        }
-        
-        console.log(`[DEBUG] parseCSV returning ${entries.length} entries`);
-        if (entries.length > 0) {
-            console.log('[DEBUG] First entry:', entries[0]);
         }
         
         return entries;
