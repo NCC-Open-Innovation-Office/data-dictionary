@@ -24,17 +24,14 @@ class DataDictionary {
 
     bindEvents() {
         const searchInput = document.getElementById('search-input');
-        const filterType = document.getElementById('filter-type');
         const filterTag = document.getElementById('filter-tag');
 
         searchInput.addEventListener('input', () => this.renderTable());
-        filterType.addEventListener('change', () => this.renderTable());
         filterTag.addEventListener('change', () => this.renderTable());
     }
 
     filterEntries() {
         const searchTerm = document.getElementById('search-input').value.toLowerCase();
-        const filterType = document.getElementById('filter-type').value;
         const filterTag = document.getElementById('filter-tag').value;
 
         return this.entries.filter(entry => {
@@ -44,14 +41,11 @@ class DataDictionary {
                 entry.definition.toLowerCase().includes(searchTerm) ||
                 (entry.abbreviation && entry.abbreviation.toLowerCase().includes(searchTerm)) ||
                 (entry.variations && entry.variations.toLowerCase().includes(searchTerm));
-
-            // Type filter
-            const matchesType = !filterType || entry.dataType === filterType;
             
             // Tag filter
             const matchesTag = !filterTag || (entry.tags && entry.tags.some(tag => tag.id === parseInt(filterTag)));
 
-            return matchesSearch && matchesType && matchesTag;
+            return matchesSearch && matchesTag;
         });
     }
 
@@ -97,7 +91,6 @@ class DataDictionary {
                 </td>
                 <td>${definitionHtml}</td>
                 <td>${entry.abbreviation ? this.escapeHtml(entry.abbreviation) : '<span class="text-muted">—</span>'}</td>
-                <td>${entry.dataType ? `<span class="badge">${this.escapeHtml(entry.dataType)}</span>` : '<span class="text-muted">—</span>'}</td>
                 <td>${entry.inputFormat ? `<code>${this.escapeHtml(entry.inputFormat)}</code>` : '<span class="text-muted">—</span>'}</td>
                 <td>${entry.variations ? this.escapeHtml(entry.variations) : '<span class="text-muted">—</span>'}</td>
                 <td>${entry.owner ? this.escapeHtml(entry.owner) : '<span class="text-muted">—</span>'}</td>

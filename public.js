@@ -18,15 +18,12 @@ class DataDictionary {
 
     bindEvents() {
         const searchInput = document.getElementById('search-input');
-        const filterType = document.getElementById('filter-type');
 
         searchInput.addEventListener('input', () => this.renderTable());
-        filterType.addEventListener('change', () => this.renderTable());
     }
 
     filterEntries() {
         const searchTerm = document.getElementById('search-input').value.toLowerCase();
-        const filterType = document.getElementById('filter-type').value;
 
         return this.entries.filter(entry => {
             // Search filter
@@ -36,10 +33,7 @@ class DataDictionary {
                 (entry.abbreviation && entry.abbreviation.toLowerCase().includes(searchTerm)) ||
                 (entry.variations && entry.variations.toLowerCase().includes(searchTerm));
 
-            // Type filter
-            const matchesType = !filterType || entry.dataType === filterType;
-
-            return matchesSearch && matchesType;
+            return matchesSearch;
         });
     }
 
@@ -64,7 +58,6 @@ class DataDictionary {
                 <td><strong>${this.escapeHtml(entry.term)}</strong></td>
                 <td>${this.escapeHtml(entry.definition)}</td>
                 <td>${entry.abbreviation ? this.escapeHtml(entry.abbreviation) : '<span class="text-muted">—</span>'}</td>
-                <td>${entry.dataType ? `<span class="badge">${this.escapeHtml(entry.dataType)}</span>` : '<span class="text-muted">—</span>'}</td>
                 <td>${entry.inputFormat ? `<code>${this.escapeHtml(entry.inputFormat)}</code>` : '<span class="text-muted">—</span>'}</td>
                 <td>${entry.variations ? this.escapeHtml(entry.variations) : '<span class="text-muted">—</span>'}</td>
             `;
