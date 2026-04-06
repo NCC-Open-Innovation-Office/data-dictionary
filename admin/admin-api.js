@@ -733,7 +733,7 @@ class DataDictionary {
 
     downloadExcel() {
         // Create CSV data (Excel can open CSV files)
-        const headers = ['DD ID', 'Term', 'Definition', 'Abbreviation', 'Data Type', 'Input Format', 'Variations', 'Created At', 'Updated At'];
+        const headers = ['DD ID', 'Term', 'Definition', 'Abbreviation', 'Data Type', 'Input Format', 'Variations', 'Owner', 'Stewards', 'Classification', 'Discussion', 'Created At', 'Updated At'];
         const csvRows = [headers.join(',')];
 
         this.entries.forEach(entry => {
@@ -745,6 +745,10 @@ class DataDictionary {
                 this.escapeCsv(entry.dataType || ''),
                 this.escapeCsv(this.normalizeNewlines(entry.inputFormat || '')),
                 this.escapeCsv(this.normalizeNewlines(entry.variations || '')),
+                this.escapeCsv(this.normalizeNewlines(entry.owner || '')),
+                this.escapeCsv(this.normalizeNewlines(entry.stewards || '')),
+                this.escapeCsv(entry.classification || ''),
+                this.escapeCsv(this.normalizeNewlines(entry.discussion || '')),
                 this.escapeCsv(entry.createdAt ? new Date(entry.createdAt).toLocaleString() : ''),
                 this.escapeCsv(entry.updatedAt ? new Date(entry.updatedAt).toLocaleString() : '')
             ];
@@ -974,6 +978,10 @@ class DataDictionary {
             const dataType = values[headerMap['data type']] || '';
             const inputFormat = this.denormalizeNewlines(values[headerMap['input format']] || '');
             const variations = this.denormalizeNewlines(values[headerMap['variations']] || '');
+            const owner = this.denormalizeNewlines(values[headerMap['owner']] || '');
+            const stewards = this.denormalizeNewlines(values[headerMap['stewards']] || '');
+            const classification = values[headerMap['classification']] || '';
+            const discussion = this.denormalizeNewlines(values[headerMap['discussion']] || '');
             
             const entry = {
                 ddId: ddId,
@@ -983,6 +991,10 @@ class DataDictionary {
                 dataType: dataType,
                 inputFormat: inputFormat,
                 variations: variations,
+                owner: owner,
+                stewards: stewards,
+                classification: classification,
+                discussion: discussion
             };
             
             // Only add if term exists
