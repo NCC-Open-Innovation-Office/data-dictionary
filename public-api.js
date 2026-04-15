@@ -53,6 +53,7 @@ class DataDictionary {
         const tbody = document.getElementById('dictionary-tbody');
         const noEntries = document.getElementById('no-entries');
         const filteredEntries = this.filterEntries();
+        const filterTag = document.getElementById('filter-tag').value;
 
         tbody.innerHTML = '';
 
@@ -75,8 +76,17 @@ class DataDictionary {
                 ).join(' ');
             }
             
+            // Determine which definition to show
+            let definitionText = entry.definition;
+            if (filterTag && entry.report_definitions && entry.report_definitions.length > 0) {
+                const reportDef = entry.report_definitions.find(d => d.tag_id === parseInt(filterTag));
+                if (reportDef) {
+                    definitionText = reportDef.definition;
+                }
+            }
+            
             // Render definition with linked entries
-            let definitionHtml = this.escapeHtml(entry.definition);
+            let definitionHtml = this.escapeHtml(definitionText);
             if (entry.links && entry.links.length > 0) {
                 const linksHtml = entry.links.map(link => 
                     `<a href="#entry-${link.target_entry_id}" class="entry-link" onclick="dictionary.scrollToEntry(${link.target_entry_id}); return false;">See ${this.escapeHtml(link.target_term)}</a>`
@@ -85,12 +95,9 @@ class DataDictionary {
             }
             
             row.innerHTML = `
-                <td>
-                    <strong>${this.escapeHtml(entry.term)}</strong>
-                    ${tagsHtml ? `<div style="margin-top: 5px;">${tagsHtml}</div>` : ''}
-                </td>
+                <td><strong>${this.escapeHtml(entry.term)}</strong></td>
                 <td>${definitionHtml}</td>
-                <td>${entry.abbreviation ? this.escapeHtml(entry.abbreviation) : '<span class="text-muted">—</span>'}</td>
+                <td>${tagsHtml || '<span class="text-muted">—</span>'}</td>
                 <td>${entry.inputFormat ? `<code>${this.escapeHtml(entry.inputFormat)}</code>` : '<span class="text-muted">—</span>'}</td>
                 <td>${entry.variations ? this.escapeHtml(entry.variations) : '<span class="text-muted">—</span>'}</td>
                 <td>${entry.owner ? this.escapeHtml(entry.owner) : '<span class="text-muted">—</span>'}</td>

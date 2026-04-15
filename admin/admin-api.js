@@ -7,6 +7,7 @@ class DataDictionary {
         this.tags = [];
         this.currentEntryTags = [];
         this.currentEntryLinks = [];
+        this.currentReportDefinitions = [];
         this.allowDdIdEdit = false; // Configuration from API
         this.sortColumn = 'term'; // Default sort column
         this.sortDirection = 'asc'; // Default sort direction (asc or desc)
@@ -36,6 +37,7 @@ class DataDictionary {
         // Render initial table
         this.renderTable();
         this.populateTagSelect();
+        this.populateReportDefTagSelect();
         this.populateLinkSelect();
     }
 
@@ -44,9 +46,6 @@ class DataDictionary {
         const searchInput = document.getElementById('search-input');
         const filterType = document.getElementById('filter-type');
         const cancelBtn = document.getElementById('cancel-btn');
-        const downloadExcelBtn = document.getElementById('download-excel-btn');
-        const uploadExcelBtn = document.getElementById('upload-excel-btn');
-        const excelFileInput = document.getElementById('excel-file-input');
         const historyBtn = document.getElementById('view-history-btn');
         const closeHistoryBtn = document.getElementById('close-history-btn');
         const closeDetailBtn = document.getElementById('close-detail-btn');
@@ -55,6 +54,14 @@ class DataDictionary {
         const closeTagModalBtn = document.getElementById('close-tag-modal-btn');
         const createTagBtn = document.getElementById('create-tag-btn');
         const addLinkBtn = document.getElementById('add-link-btn');
+
+        // Report definitions button
+        const addReportDefBtn = document.getElementById('add-report-def-btn');
+
+        // JSON backup/restore buttons
+        const jsonBackupBtn = document.getElementById('json-backup-btn');
+        const jsonRestoreBtn = document.getElementById('json-restore-btn');
+        const jsonFileInput = document.getElementById('json-file-input');
 
         form.addEventListener('submit', (e) => {
             e.preventDefault();
@@ -70,30 +77,19 @@ class DataDictionary {
             this.renderTable();
         });
         cancelBtn.addEventListener('click', () => this.cancelEdit());
-        downloadExcelBtn.addEventListener('click', () => this.downloadExcel());
-        uploadExcelBtn.addEventListener('click', () => excelFileInput.click());
-        excelFileInput.addEventListener('change', (e) => this.handleFileUpload(e));
         historyBtn.addEventListener('click', () => this.showHistory());
         closeHistoryBtn.addEventListener('click', () => this.hideHistory());
         closeDetailBtn.addEventListener('click', () => this.hideDetail());
         addTagBtn.addEventListener('click', () => this.addTagToEntry());
+        document.getElementById('tag-select').addEventListener('change', () => this.addTagToEntry());
         manageTagsBtn.addEventListener('click', () => this.showTagManagement());
         closeTagModalBtn.addEventListener('click', () => this.hideTagManagement());
         createTagBtn.addEventListener('click', () => this.createTag());
         addLinkBtn.addEventListener('click', () => this.addLinkToEntry());
-        
-        // TEMPORARY: Reset database button - REMOVE BEFORE PRODUCTION
-        const resetDbBtn = document.getElementById('reset-database-btn');
-        console.log('Reset button element:', resetDbBtn);
-        if (resetDbBtn) {
-            console.log('Attaching event listener to reset button');
-            resetDbBtn.addEventListener('click', () => {
-                console.log('Reset button clicked!');
-                this.resetDatabase();
-            });
-        } else {
-            console.error('Reset database button not found in DOM');
-        }
+        addReportDefBtn.addEventListener('click', () => this.addReportDefinition());
+        jsonBackupBtn.addEventListener('click', () => this.downloadJsonBackup());
+        jsonRestoreBtn.addEventListener('click', () => jsonFileInput.click());
+        jsonFileInput.addEventListener('change', (e) => this.handleJsonRestore(e));
         
         // Add event listeners for sortable column headers
         document.querySelectorAll('.sortable').forEach(th => {
@@ -162,6 +158,7 @@ class DataDictionary {
                 // Sync tags and links for new entry
                 await this.syncEntryTags(entryId);
                 await this.syncEntryLinks(entryId);
+                await this.syncReportDefinitions(entryId);
                 
                 alert('Entry created successfully!');
             } else {
@@ -179,6 +176,7 @@ class DataDictionary {
                 
                 // Sync tags for existing entry (links are synced in real-time)
                 await this.syncEntryTags(entryId);
+                await this.syncReportDefinitions(entryId);
                 
                 alert('Entry updated successfully!');
                 this.editingIndex = -1;
@@ -216,6 +214,11 @@ class DataDictionary {
         // Load tags
         this.currentEntryTags = entry.tags || [];
         this.renderEntryTags();
+
+        // Load report-specific definitions
+        this.currentReportDefinitions = (entry.report_definitions || []).map(d => ({...d}));
+        this.renderReportDefinitions();
+        this.populateReportDefTagSelect();
 
         // Load links
         this.currentEntryLinks = entry.links || [];
@@ -260,8 +263,10 @@ class DataDictionary {
         this.editingIndex = -1;
         this.currentEntryTags = [];
         this.currentEntryLinks = [];
+        this.currentReportDefinitions = [];
         this.renderEntryTags();
         this.renderEntryLinks();
+        this.renderReportDefinitions();
         this.resetForm();
         document.getElementById('form-title').textContent = 'Add New Entry';
         document.getElementById('submit-btn').textContent = 'Add Entry';
@@ -273,8 +278,10 @@ class DataDictionary {
         document.getElementById('classification').value = 'public'; // Reset to default
         this.currentEntryTags = [];
         this.currentEntryLinks = [];
+        this.currentReportDefinitions = [];
         this.renderEntryTags();
         this.renderEntryLinks();
+        this.renderReportDefinitions();
         this.populateLinkSelect(); // Refresh the link dropdown
     }
 
@@ -731,328 +738,6 @@ class DataDictionary {
         }).join('');
     }
 
-    downloadExcel() {
-        // Create CSV data (Excel can open CSV files)
-        const headers = ['DD ID', 'Term', 'Definition', 'Abbreviation', 'Data Type', 'Input Format', 'Variations', 'Owner', 'Stewards', 'Classification', 'Discussion', 'Created At', 'Updated At'];
-        const csvRows = [headers.join(',')];
-
-        this.entries.forEach(entry => {
-            const row = [
-                this.escapeCsv(entry.ddId || ''),
-                this.escapeCsv(this.normalizeNewlines(entry.term)),
-                this.escapeCsv(this.normalizeNewlines(entry.definition)),
-                this.escapeCsv(this.normalizeNewlines(entry.abbreviation || '')),
-                this.escapeCsv(entry.dataType || ''),
-                this.escapeCsv(this.normalizeNewlines(entry.inputFormat || '')),
-                this.escapeCsv(this.normalizeNewlines(entry.variations || '')),
-                this.escapeCsv(this.normalizeNewlines(entry.owner || '')),
-                this.escapeCsv(this.normalizeNewlines(entry.stewards || '')),
-                this.escapeCsv(entry.classification || ''),
-                this.escapeCsv(this.normalizeNewlines(entry.discussion || '')),
-                this.escapeCsv(entry.createdAt ? new Date(entry.createdAt).toLocaleString() : ''),
-                this.escapeCsv(entry.updatedAt ? new Date(entry.updatedAt).toLocaleString() : '')
-            ];
-            csvRows.push(row.join(','));
-        });
-
-        const csvContent = csvRows.join('\n');
-        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = `data-dictionary-${new Date().toISOString().split('T')[0]}.csv`;
-        link.click();
-        URL.revokeObjectURL(url);
-    }
-
-    // TEMPORARY: Reset database method - REMOVE BEFORE PRODUCTION
-    async resetDatabase() {
-        console.log('Reset database function called');
-        const confirmMessage = 'WARNING: This will DELETE ALL ENTRIES from the database!\n\n' +
-                             'This action cannot be undone.\n\n' +
-                             'After resetting, you can upload a backup CSV to restore your data.\n\n' +
-                             'Type "DELETE ALL" to confirm:';
-        
-        const confirmation = prompt(confirmMessage);
-        
-        if (confirmation !== 'DELETE ALL') {
-            if (confirmation !== null) {
-                alert('Reset cancelled. You must type "DELETE ALL" exactly to confirm.');
-            }
-            return;
-        }
-        
-        try {
-            const response = await fetch(`${this.apiBase}/entries/reset-database`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' }
-            });
-            
-            if (!response.ok) {
-                const error = await response.json();
-                throw new Error(error.error || 'Failed to reset database');
-            }
-            
-            const result = await response.json();
-            alert(result.message + '\n\nYou can now upload a backup CSV file to restore your data.');
-            
-            // Reload the page to reflect empty database
-            await this.loadData();
-            this.renderTable();
-            
-        } catch (error) {
-            console.error('Error resetting database:', error);
-            alert('Error resetting database: ' + error.message);
-        }
-    }
-
-    normalizeNewlines(text) {
-        if (!text) return '';
-        // Replace newlines with space + pipe + space for better CSV compatibility
-        return text.replace(/\r?\n/g, ' | ');
-    }
-
-    async handleFileUpload(event) {
-        const file = event.target.files[0];
-        if (!file) return;
-
-        // Check file type
-        const fileName = file.name.toLowerCase();
-        if (!fileName.endsWith('.csv') && !fileName.endsWith('.xlsx') && !fileName.endsWith('.xls')) {
-            alert('Please upload a CSV or Excel file');
-            return;
-        }
-
-        try {
-            const text = await file.text();
-            const entries = this.parseCSV(text);
-            
-            if (entries.length === 0) {
-                alert('No valid entries found in the file');
-                return;
-            }
-
-            const confirmed = confirm(
-                `Found ${entries.length} entries in the file.\n\n` +
-                `This will:\n` +
-                `• Add new entries that don't exist\n` +
-                `• Update existing entries with matching terms\n\n` +
-                `Do you want to proceed?`
-            );
-
-            if (!confirmed) {
-                event.target.value = ''; // Reset file input
-                return;
-            }
-
-            // Show loading indicator
-            const uploadBtn = document.getElementById('upload-excel-btn');
-            const originalText = uploadBtn.textContent;
-            uploadBtn.textContent = '⏳ Uploading...';
-            uploadBtn.disabled = true;
-
-            // Send to API
-            const response = await fetch(`${this.apiBase}/entries/bulk-import`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ entries })
-            });
-
-            if (!response.ok) {
-                throw new Error('Upload failed');
-            }
-
-            const result = await response.json();
-            
-            // Show results
-            let message = `Import completed!\n\n`;
-            message += `✅ New entries imported: ${result.imported}\n`;
-            message += `🔄 Existing entries updated: ${result.updated}\n`;
-            message += `⏭️  Entries skipped: ${result.skipped}\n`;
-            
-            if (result.errors && result.errors.length > 0) {
-                message += `\n⚠️ Errors:\n${result.errors.slice(0, 5).join('\n')}`;
-                if (result.errors.length > 5) {
-                    message += `\n... and ${result.errors.length - 5} more`;
-                }
-            }
-
-            alert(message);
-
-            // Reload data
-            await this.loadData();
-            this.renderTable();
-
-            // Reset button and file input
-            uploadBtn.textContent = originalText;
-            uploadBtn.disabled = false;
-            event.target.value = '';
-
-        } catch (error) {
-            console.error('Upload error:', error);
-            alert('Error uploading file: ' + error.message);
-            
-            // Reset button
-            const uploadBtn = document.getElementById('upload-excel-btn');
-            uploadBtn.textContent = '📤 Upload Excel';
-            uploadBtn.disabled = false;
-            event.target.value = '';
-        }
-    }
-
-    parseCSV(text) {
-        // Parse CSV properly handling quoted fields with newlines
-        const rows = [];
-        let currentRow = [];
-        let currentField = '';
-        let inQuotes = false;
-        
-        for (let i = 0; i < text.length; i++) {
-            const char = text[i];
-            const nextChar = text[i + 1];
-            
-            if (char === '"') {
-                if (inQuotes && nextChar === '"') {
-                    // Escaped quote
-                    currentField += '"';
-                    i++; // Skip next quote
-                } else {
-                    // Toggle quotes
-                    inQuotes = !inQuotes;
-                }
-            } else if (char === ',' && !inQuotes) {
-                // End of field
-                currentRow.push(currentField.trim());
-                currentField = '';
-            } else if ((char === '\n' || char === '\r') && !inQuotes) {
-                // End of row
-                if (currentField || currentRow.length > 0) {
-                    currentRow.push(currentField.trim());
-                    if (currentRow.some(field => field)) { // Only add non-empty rows
-                        rows.push(currentRow);
-                    }
-                    currentRow = [];
-                    currentField = '';
-                }
-                // Skip \r\n combination
-                if (char === '\r' && nextChar === '\n') {
-                    i++;
-                }
-            } else if (char !== '\r') { // Skip standalone \r
-                currentField += char;
-            }
-        }
-        
-        // Add last field and row if exists
-        if (currentField || currentRow.length > 0) {
-            currentRow.push(currentField.trim());
-            if (currentRow.some(field => field)) {
-                rows.push(currentRow);
-            }
-        }
-        
-        if (rows.length < 2) return [];
-        
-        // First row is headers
-        const headers = rows[0];
-        const entries = [];
-        
-        // Map header positions
-        const headerMap = {};
-        headers.forEach((header, index) => {
-            const normalized = header.toLowerCase().trim();
-            headerMap[normalized] = index;
-        });
-        
-        // Parse data rows
-        for (let i = 1; i < rows.length; i++) {
-            const values = rows[i];
-            
-            // Get values with fallbacks and denormalize newlines
-            const ddId = values[headerMap['dd id']] || '';
-            const term = this.denormalizeNewlines(values[headerMap['term']] || '');
-            const definition = this.denormalizeNewlines(values[headerMap['definition']] || '');
-            const abbreviation = this.denormalizeNewlines(values[headerMap['abbreviation']] || '');
-            const dataType = values[headerMap['data type']] || '';
-            const inputFormat = this.denormalizeNewlines(values[headerMap['input format']] || '');
-            const variations = this.denormalizeNewlines(values[headerMap['variations']] || '');
-            const owner = this.denormalizeNewlines(values[headerMap['owner']] || '');
-            const stewards = this.denormalizeNewlines(values[headerMap['stewards']] || '');
-            const classification = values[headerMap['classification']] || '';
-            const discussion = this.denormalizeNewlines(values[headerMap['discussion']] || '');
-            
-            const entry = {
-                ddId: ddId,
-                term: term,
-                definition: definition,
-                abbreviation: abbreviation,
-                dataType: dataType,
-                inputFormat: inputFormat,
-                variations: variations,
-                owner: owner,
-                stewards: stewards,
-                classification: classification,
-                discussion: discussion
-            };
-            
-            // Only add if term exists
-            if (entry.term && entry.term.trim()) {
-                entries.push(entry);
-            }
-        }
-        
-        return entries;
-    }
-
-    denormalizeNewlines(text) {
-        if (!text) return '';
-        // Convert pipe separators back to newlines
-        return text.replace(/ \| /g, '\n');
-    }
-
-    parseCSVLine(line) {
-        const result = [];
-        let current = '';
-        let inQuotes = false;
-
-        for (let i = 0; i < line.length; i++) {
-            const char = line[i];
-            const nextChar = line[i + 1];
-
-            if (char === '"') {
-                if (inQuotes && nextChar === '"') {
-                    // Escaped quote
-                    current += '"';
-                    i++; // Skip next quote
-                } else {
-                    // Toggle quotes
-                    inQuotes = !inQuotes;
-                }
-            } else if (char === ',' && !inQuotes) {
-                // End of field
-                result.push(current.trim());
-                current = '';
-            } else {
-                current += char;
-            }
-        }
-
-        // Add last field
-        result.push(current.trim());
-        return result;
-    }
-
-    escapeCsv(text) {
-        if (text === null || text === undefined) return '';
-        const str = String(text);
-        if (str.includes(',') || str.includes('"') || str.includes('\n')) {
-            return `"${str.replace(/"/g, '""')}"`;
-        }
-        return str;
-    }
-
     // Tag Management Methods
     async loadTags() {
         try {
@@ -1096,19 +781,13 @@ class DataDictionary {
         const select = document.getElementById('tag-select');
         const tagId = parseInt(select.value);
         
-        if (!tagId) {
-            alert('Please select a tag');
-            return;
-        }
+        if (!tagId) return;
 
         const tag = this.tags.find(t => t.id === tagId);
         if (!tag) return;
 
         // Check if tag already added
-        if (this.currentEntryTags.find(t => t.id === tagId)) {
-            alert('Report already added');
-            return;
-        }
+        if (this.currentEntryTags.find(t => t.id === tagId)) return;
 
         this.currentEntryTags.push(tag);
         this.renderEntryTags();
@@ -1183,6 +862,7 @@ class DataDictionary {
             
             await this.loadTags();
             this.populateTagSelect();
+            this.populateReportDefTagSelect();
             this.renderTagsList();
             alert('Report created successfully!');
         } catch (error) {
@@ -1206,6 +886,7 @@ class DataDictionary {
             await this.loadTags();
             await this.loadData();
             this.populateTagSelect();
+            this.populateReportDefTagSelect();
             this.renderTagsList();
             this.renderTable();
             alert('Report deleted successfully!');
@@ -1421,6 +1102,211 @@ class DataDictionary {
             }
         } catch (error) {
             console.error('Error syncing links:', error);
+        }
+    }
+
+    // Report-Specific Definitions Methods
+    populateReportDefTagSelect() {
+        const select = document.getElementById('report-def-tag-select');
+        if (!select) return;
+        select.innerHTML = '<option value="">-- Select a report --</option>';
+        this.tags.forEach(tag => {
+            // Only show tags not yet having a definition
+            const hasDefinition = this.currentReportDefinitions.some(d => d.tag_id === tag.id);
+            if (!hasDefinition) {
+                const option = document.createElement('option');
+                option.value = tag.id;
+                option.textContent = tag.name;
+                select.appendChild(option);
+            }
+        });
+    }
+
+    renderReportDefinitions() {
+        const container = document.getElementById('report-definitions-container');
+        if (!container) return;
+        container.innerHTML = '';
+
+        if (this.currentReportDefinitions.length === 0) {
+            container.innerHTML = '<p style="color:#999; font-size:0.9em;">No report-specific definitions yet. The default definition above will be used for all reports.</p>';
+            return;
+        }
+
+        this.currentReportDefinitions.forEach((def, index) => {
+            const div = document.createElement('div');
+            div.style.cssText = 'border: 1px solid #ddd; border-radius: 4px; padding: 10px; margin-bottom: 8px; background: #f8f9fa;';
+            
+            const tag = this.tags.find(t => t.id === def.tag_id);
+            const tagColor = tag ? tag.color : '#004C8E';
+            const tagName = def.tag_name || (tag ? tag.name : 'Unknown Report');
+            
+            div.innerHTML = `
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                    <span class="tag" style="background-color: ${tagColor}">${this.escapeHtml(tagName)}</span>
+                    <button type="button" class="btn btn-delete btn-small" onclick="dictionary.removeReportDefinition(${index})">Remove</button>
+                </div>
+                <textarea rows="2" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; resize: vertical;"
+                    onchange="dictionary.updateReportDefinitionText(${index}, this.value)">${this.escapeHtml(def.definition || '')}</textarea>
+            `;
+            container.appendChild(div);
+        });
+    }
+
+    addReportDefinition() {
+        const select = document.getElementById('report-def-tag-select');
+        const tagId = parseInt(select.value);
+
+        if (!tagId) {
+            alert('Please select a report');
+            return;
+        }
+
+        const tag = this.tags.find(t => t.id === tagId);
+        if (!tag) return;
+
+        // Check if already exists
+        if (this.currentReportDefinitions.some(d => d.tag_id === tagId)) {
+            alert('A definition for this report already exists');
+            return;
+        }
+
+        this.currentReportDefinitions.push({
+            tag_id: tagId,
+            tag_name: tag.name,
+            tag_color: tag.color,
+            definition: '',
+            _isNew: true
+        });
+        this.renderReportDefinitions();
+        this.populateReportDefTagSelect();
+        select.value = '';
+    }
+
+    removeReportDefinition(index) {
+        this.currentReportDefinitions.splice(index, 1);
+        this.renderReportDefinitions();
+        this.populateReportDefTagSelect();
+    }
+
+    updateReportDefinitionText(index, text) {
+        if (this.currentReportDefinitions[index]) {
+            this.currentReportDefinitions[index].definition = text;
+        }
+    }
+
+    async syncReportDefinitions(entryId) {
+        try {
+            // Get current definitions from server
+            const response = await fetch(`${this.apiBase}/entries/${entryId}/definitions`);
+            const serverDefs = response.ok ? await response.json() : [];
+            
+            const serverTagIds = new Set(serverDefs.map(d => d.tag_id));
+            const clientTagIds = new Set(this.currentReportDefinitions.map(d => d.tag_id));
+
+            // Add or update definitions
+            for (const def of this.currentReportDefinitions) {
+                await fetch(`${this.apiBase}/entries/${entryId}/definitions`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ tag_id: def.tag_id, definition: def.definition })
+                });
+            }
+
+            // Remove definitions no longer present
+            for (const serverDef of serverDefs) {
+                if (!clientTagIds.has(serverDef.tag_id)) {
+                    await fetch(`${this.apiBase}/entries/${entryId}/definitions/${serverDef.id}`, {
+                        method: 'DELETE'
+                    });
+                }
+            }
+        } catch (error) {
+            console.error('Error syncing report definitions:', error);
+        }
+    }
+
+    // JSON Backup/Restore Methods
+    async downloadJsonBackup() {
+        try {
+            const response = await fetch(`${this.apiBase}/backup`);
+            if (!response.ok) throw new Error('Failed to create backup');
+            
+            const backup = await response.json();
+            const jsonContent = JSON.stringify(backup, null, 2);
+            const blob = new Blob([jsonContent], { type: 'application/json;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `data-dictionary-backup-${new Date().toISOString().split('T')[0]}.json`;
+            link.click();
+            URL.revokeObjectURL(url);
+        } catch (error) {
+            console.error('Error creating backup:', error);
+            alert('Error creating backup: ' + error.message);
+        }
+    }
+
+    async handleJsonRestore(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+
+        try {
+            const text = await file.text();
+            const backup = JSON.parse(text);
+
+            if (!backup.entries) {
+                alert('Invalid backup file: missing entries data');
+                event.target.value = '';
+                return;
+            }
+
+            const confirmed = confirm(
+                `This will REPLACE ALL current data with the backup.\n\n` +
+                `Backup contains:\n` +
+                `• ${backup.entries.length} entries\n` +
+                `• ${(backup.tags || []).length} reports/tags\n` +
+                `• ${(backup.entry_definitions || []).length} report-specific definitions\n` +
+                `• ${(backup.entry_links || []).length} entry links\n\n` +
+                `Do you want to proceed?`
+            );
+
+            if (!confirmed) {
+                event.target.value = '';
+                return;
+            }
+
+            const response = await fetch(`${this.apiBase}/restore`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(backup)
+            });
+
+            if (!response.ok) {
+                const error = await response.json();
+                throw new Error(error.error || 'Restore failed');
+            }
+
+            const result = await response.json();
+            alert(
+                `Restore completed!\n\n` +
+                `✅ Entries: ${result.entries}\n` +
+                `🏷️ Tags: ${result.tags}\n` +
+                `📝 Report definitions: ${result.entry_definitions}\n` +
+                `🔗 Entry links: ${result.entry_links}`
+            );
+
+            // Reload everything
+            await this.loadData();
+            await this.loadTags();
+            this.populateTagSelect();
+            this.populateReportDefTagSelect();
+            this.renderTable();
+            event.target.value = '';
+
+        } catch (error) {
+            console.error('Error restoring backup:', error);
+            alert('Error restoring backup: ' + error.message);
+            event.target.value = '';
         }
     }
 }

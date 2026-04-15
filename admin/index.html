@@ -90,7 +90,8 @@
                         <label for="classification">Classification</label>
                         <select id="classification" name="classification">
                             <option value="public">Public</option>
-                            <option value="private">Private</option>
+                            <option value="internal">Internal</option>
+                            <option value="sensitive">Sensitive</option>
                             <option value="protected">Protected</option>
                         </select>
                     </div>
@@ -112,6 +113,22 @@
                             </select>
                             <button type="button" class="btn btn-secondary btn-small" id="add-tag-btn">Add Report</button>
                             <button type="button" class="btn btn-secondary btn-small" id="manage-tags-btn">Manage Reports</button>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Report-Specific Definitions</label>
+                        <small style="color: #666; font-size: 12px; display: block; margin-bottom: 8px;">
+                            Add a custom definition for each report this term is aligned to. When users filter by a report, this definition will be shown instead of the default.
+                        </small>
+                        <div id="report-definitions-container" style="margin-bottom: 10px;">
+                            <!-- Report-specific definitions will be displayed here -->
+                        </div>
+                        <div style="display: flex; gap: 10px;">
+                            <select id="report-def-tag-select" class="tag-select">
+                                <option value="">-- Select a report --</option>
+                            </select>
+                            <button type="button" class="btn btn-secondary btn-small" id="add-report-def-btn">Add Definition</button>
                         </div>
                     </div>
 
@@ -143,22 +160,18 @@
                 <div class="search-header">
                     <h2>Dictionary Entries</h2>
                     <div class="header-buttons">
-                        <!-- TEMPORARY: Reset button for troubleshooting - REMOVE BEFORE PRODUCTION -->
-                        <button id="reset-database-btn" class="btn btn-small" style="background-color: #dc3545; color: white;">
-                            ⚠️ Reset Database
-                        </button>
                         <button id="view-history-btn" class="btn btn-secondary btn-small">
                             📋 View Change History
                         </button>
-                        <button id="upload-excel-btn" class="btn btn-secondary btn-small">
-                            📤 Upload Excel
+                        <button id="json-backup-btn" class="btn btn-primary btn-small">
+                            💾 Backup
                         </button>
-                        <button id="download-excel-btn" class="btn btn-primary btn-small">
-                            📥 Download Excel
+                        <button id="json-restore-btn" class="btn btn-secondary btn-small">
+                            📂 Restore
                         </button>
+                        <input type="file" id="json-file-input" accept=".json" style="display: none;">
                     </div>
                 </div>
-                <input type="file" id="excel-file-input" accept=".csv,.xlsx,.xls" style="display: none;">
                 <div class="search-bar">
                     <input type="text" id="search-input" placeholder="🔍 Search by term, definition, or abbreviation...">
                     <select id="filter-type">

@@ -737,7 +737,7 @@ footer {
     color: white;
 }
 
-.classification-private {
+.classification-internal {
     display: inline-block;
     padding: 3px 8px;
     border-radius: 12px;
@@ -745,7 +745,19 @@ footer {
     font-weight: bold;
     text-transform: uppercase;
     letter-spacing: 0.5px;
-    background: #dc3545;
+    background: #ffc107;
+    color: #212529;
+}
+
+.classification-sensitive {
+    display: inline-block;
+    padding: 3px 8px;
+    border-radius: 12px;
+    font-size: 10px;
+    font-weight: bold;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    background: #fd7e14;
     color: white;
 }
 
@@ -757,8 +769,8 @@ footer {
     font-weight: bold;
     text-transform: uppercase;
     letter-spacing: 0.5px;
-    background: #ffc107;
-    color: #212529;
+    background: #dc3545;
+    color: white;
 }
 
 /* Entry Link Styles */
