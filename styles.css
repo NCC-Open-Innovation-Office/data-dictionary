@@ -745,8 +745,9 @@ footer {
     font-weight: bold;
     text-transform: uppercase;
     letter-spacing: 0.5px;
-    background: #ffc107;
-    color: #212529;
+    background: #e6ac00;
+    color: white;
+    border: 1px solid #cc9900;
 }
 
 .classification-sensitive {
