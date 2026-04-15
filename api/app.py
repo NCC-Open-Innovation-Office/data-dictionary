@@ -1,12 +1,10 @@
 from flask import Flask, request, jsonify
-from flask_cors import CORS
 import sqlite3
 import json
 from datetime import datetime
 import os
 
 app = Flask(__name__)
-CORS(app)  # Enable CORS for frontend access
 
 DATABASE = os.environ.get('DATABASE', 'dictionary.db')
 ALLOW_DD_ID_EDIT = os.environ.get('ALLOW_DD_ID_EDIT', 'false').lower() == 'true'

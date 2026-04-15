@@ -1,11 +1,79 @@
 #!/usr/bin/env python
 """
-Simple script to run both servers for local development
+Simple script to run both servers for local development.
+Includes a reverse proxy so /api/ requests are forwarded to Flask,
+eliminating the need for CORS.
 """
 import subprocess
 import sys
 import os
 import time
+import threading
+from http.server import SimpleHTTPRequestHandler, HTTPServer
+from urllib.request import urlopen, Request
+from urllib.error import URLError
+
+API_PORT = 5001
+WEB_PORT = 8000
+
+class ProxyHandler(SimpleHTTPRequestHandler):
+    """Serves static files and proxies /api/ requests to Flask."""
+
+    def do_request(self, method):
+        if self.path.startswith('/api/') or self.path == '/api':
+            self.proxy_to_api(method)
+        else:
+            # Fall through to default handler for GET/HEAD
+            if method == 'GET':
+                super().do_GET()
+            elif method == 'HEAD':
+                super().do_HEAD()
+            else:
+                self.send_error(405)
+
+    def proxy_to_api(self, method):
+        url = f'http://127.0.0.1:{API_PORT}{self.path}'
+        body = None
+        if method in ('POST', 'PUT', 'PATCH'):
+            length = int(self.headers.get('Content-Length', 0))
+            body = self.rfile.read(length) if length else None
+
+        headers = {}
+        for key in ('Content-Type', 'Accept', 'Authorization'):
+            val = self.headers.get(key)
+            if val:
+                headers[key] = val
+
+        try:
+            req = Request(url, data=body, headers=headers, method=method)
+            with urlopen(req) as resp:
+                resp_body = resp.read()
+                self.send_response(resp.status)
+                for h, v in resp.getheaders():
+                    if h.lower() not in ('transfer-encoding', 'connection'):
+                        self.send_header(h, v)
+                self.end_headers()
+                self.wfile.write(resp_body)
+        except URLError as e:
+            self.send_error(502, f'API unreachable: {e}')
+
+    def do_GET(self):
+        self.do_request('GET')
+    def do_POST(self):
+        self.do_request('POST')
+    def do_PUT(self):
+        self.do_request('PUT')
+    def do_PATCH(self):
+        self.do_request('PATCH')
+    def do_DELETE(self):
+        self.do_request('DELETE')
+    def do_HEAD(self):
+        self.do_request('HEAD')
+
+    def log_message(self, fmt, *args):
+        # Keep default logging
+        super().log_message(fmt, *args)
+
 
 def main():
     print("=" * 60)
@@ -20,7 +88,7 @@ def main():
     
     try:
         # Start Flask API server
-        print("Starting Flask API server on port 5001...")
+        print(f"Starting Flask API server on port {API_PORT}...")
         api_process = subprocess.Popen(
             [sys.executable, 'app.py'],
             cwd='api',
@@ -29,13 +97,11 @@ def main():
         processes.append(('API Server', api_process))
         time.sleep(2)
         
-        # Start Python HTTP server for frontend
-        print("Starting web server on port 8000...")
-        web_process = subprocess.Popen(
-            [sys.executable, '-m', 'http.server', '8000']
-        )
-        processes.append(('Web Server', web_process))
-        time.sleep(1)
+        # Start proxying web server for frontend
+        print(f"Starting web server on port {WEB_PORT} (proxying /api/ → :{API_PORT})...")
+        server = HTTPServer(('0.0.0.0', WEB_PORT), ProxyHandler)
+        web_thread = threading.Thread(target=server.serve_forever, daemon=True)
+        web_thread.start()
         
         print()
         print("=" * 60)

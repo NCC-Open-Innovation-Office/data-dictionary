@@ -11,9 +11,7 @@ class DataDictionary {
         this.allowDdIdEdit = false; // Configuration from API
         this.sortColumn = 'term'; // Default sort column
         this.sortDirection = 'asc'; // Default sort direction (asc or desc)
-        // API URL configuration for both local and Docker environments
-        const isLocalDev = (window.location.port === '8000' || window.location.port === '8001') && window.location.hostname === 'localhost';
-        this.apiBase = isLocalDev ? 'http://localhost:5001/api' : '/api';
+        this.apiBase = '/api';
         this.init();
     }
 
