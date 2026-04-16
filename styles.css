@@ -669,6 +669,7 @@ footer {
     font-size: 13px;
     color: white;
     font-weight: 500;
+    margin: 2px 0;
 }
 
 .tag-remove {
