@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Data Dictionary Platform</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <img src="logo-header.png" alt="Northampton Community College" class="header-logo">
+            <h1>Data Dictionary</h1>
+            <p class="subtitle">Organizational terms, definitions, and data standards</p>
+        </header>
+
+        <main>
+            <!-- Search and Filter Section -->
+            <section class="search-section">
+                <h2>Dictionary Entries</h2>
+                <div class="search-bar">
+                    <input type="text" id="search-input" placeholder="🔍 Search by term, definition, or abbreviation...">
+                    <select id="filter-tag">
+                        <option value="">All Reports</option>
+                    </select>
+                </div>
+            </section>
+
+            <!-- Dictionary Table Section -->
+            <section class="table-section">
+                <div class="table-container">
+                    <table id="dictionary-table">
+                        <thead id="dictionary-thead">
+                            <tr>
+                                <th>Term</th>
+                                <th>Definition</th>
+                                <th>Reports</th>
+                                <th>Input Format</th>
+                                <th>Variations</th>
+                                <th>Owner</th>
+                                <th>Stewards</th>
+                                <th>Classification</th>
+                            </tr>
+                        </thead>
+                        <tbody id="dictionary-tbody">
+                            <!-- Entries will be dynamically added here -->
+                        </tbody>
+                    </table>
+                    <div id="no-entries" class="no-entries" style="display:none;">
+                        <p>No entries found. Add your first entry above!</p>
+                    </div>
+                </div>
+            </section>
+        </main>
+
+        <footer>
+            <p>Data Dictionary Platform &copy; 2025 | Licensed under GPL-3.0</p>
+        </footer>
+    </div>
+
+<script src="public-api.js?v=2.2"></script>

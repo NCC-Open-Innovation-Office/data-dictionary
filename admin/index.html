@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Data Dictionary Platform - Admin</title>
+    <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+                        <img src="../logo-header.png" alt="Northampton Community College" class="header-logo">
+            <h1>📚 Data Dictionary Platform - Admin</h1>
+            <p class="subtitle">Manage organizational terms, definitions, and data standards</p>
+            <div class="auth-section">
+                <a href="../index.html" class="btn btn-secondary btn-small">Public View</a>
+            </div>
+        </header>
+
+        <main>
+            <!-- Add/Edit Form Section -->
+            <section class="form-section">
+                <h2 id="form-title">Add New Entry</h2>
+                <form id="dictionary-form">
+                    <div class="form-group">
+                        <label for="ddId">DD ID</label>
+                        <input type="text" id="ddId" name="ddId" readonly placeholder="Auto-assigned" style="background-color: #f5f5f5; cursor: not-allowed;">
+                        <small style="color: #666; font-size: 12px;">DD IDs can only be modified directly in the database</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="term">Term *</label>
+                        <input type="text" id="term" name="term" required placeholder="e.g., API, Customer ID">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="definition">Definition *</label>
+                        <textarea id="definition" name="definition" required rows="3" placeholder="Clear and concise explanation of the term"></textarea>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="abbreviation">Abbreviation</label>
+                            <input type="text" id="abbreviation" name="abbreviation" placeholder="e.g., API">
+                        </div>
+
+                        <div class="form-group">
+                            <label for="dataType">Data Type</label>
+                            <select id="dataType" name="dataType">
+                                <option value="">-- Select --</option>
+                                <option value="String">String</option>
+                                <option value="Number">Number</option>
+                                <option value="Integer">Integer</option>
+                                <option value="Float">Float</option>
+                                <option value="Boolean">Boolean</option>
+                                <option value="Date">Date</option>
+                                <option value="DateTime">DateTime</option>
+                                <option value="Array">Array</option>
+                                <option value="Object">Object</option>
+                                <option value="JSON">JSON</option>
+                                <option value="Other">Other</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="inputFormat">Input Format</label>
+                        <input type="text" id="inputFormat" name="inputFormat" placeholder="e.g., YYYY-MM-DD, ###-###-####">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="variations">Variations</label>
+                        <textarea id="variations" name="variations" rows="2" placeholder="Comma-separated list of alternative terms or spellings"></textarea>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="owner">Owner</label>
+                            <input type="text" id="owner" name="owner" list="owner-suggestions" placeholder="Enter owner name">
+                            <datalist id="owner-suggestions"></datalist>
+                        </div>
+                        <div class="form-group">
+                            <label for="stewards">Stewards</label>
+                            <input type="text" id="stewards" name="stewards" list="steward-suggestions" placeholder="Enter stewards">
+                            <datalist id="steward-suggestions"></datalist>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="classification">Classification</label>
+                        <select id="classification" name="classification">
+                            <option value="public">Public</option>
+                            <option value="internal">Internal</option>
+                            <option value="sensitive">Sensitive</option>
+                            <option value="protected">Protected</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="discussion">Discussion (Internal Only)</label>
+                        <textarea id="discussion" name="discussion" rows="3" placeholder="Context about why this definition was chosen. Not visible to the public."></textarea>
+                        <small style="color: #666; font-size: 12px;">This field is only visible to admins and in change history.</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="entry-tags">Reports</label>
+                        <div id="entry-tags-container" class="tags-container">
+                            <!-- Reports will be displayed here -->
+                        </div>
+                        <div style="display: flex; gap: 10px; margin-top: 10px;">
+                            <select id="tag-select" class="tag-select">
+                                <option value="">-- Select a report --</option>
+                            </select>
+                            <button type="button" class="btn btn-secondary btn-small" id="add-tag-btn">Add Report</button>
+                            <button type="button" class="btn btn-secondary btn-small" id="manage-tags-btn">Manage Reports</button>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Report-Specific Definitions</label>
+                        <small style="color: #666; font-size: 12px; display: block; margin-bottom: 8px;">
+                            Add a custom definition for each report this term is aligned to. When users filter by a report, this definition will be shown instead of the default.
+                        </small>
+                        <div id="report-definitions-container" style="margin-bottom: 10px;">
+                            <!-- Report-specific definitions will be displayed here -->
+                        </div>
+                        <div style="display: flex; gap: 10px;">
+                            <select id="report-def-tag-select" class="tag-select">
+                                <option value="">-- Select a report --</option>
+                            </select>
+                            <button type="button" class="btn btn-secondary btn-small" id="add-report-def-btn">Add Definition</button>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="entry-links">Linked Entries</label>
+                        <small style="color: #666; font-size: 12px; display: block; margin-bottom: 8px;">
+                            Linked entries will show "See [term]" in the definition and jump to that entry.
+                        </small>
+                        <div id="entry-links-container" style="margin-bottom: 10px;">
+                            <!-- Linked entries will be displayed here -->
+                        </div>
+                        <div style="display: flex; gap: 10px;">
+                            <select id="link-select" class="tag-select">
+                                <option value="">Select an entry to link...</option>
+                            </select>
+                            <button type="button" class="btn btn-secondary btn-small" id="add-link-btn">Add Link</button>
+                        </div>
+                    </div>
+
+                    <div class="form-actions">
+                        <button type="submit" class="btn btn-primary" id="submit-btn">Add Entry</button>
+                        <button type="button" class="btn btn-secondary" id="cancel-btn" style="display:none;">Cancel</button>
+                    </div>
+                </form>
+            </section>
+
+            <!-- Search and Filter Section -->
+            <section class="search-section">
+                <div class="search-header">
+                    <h2>Dictionary Entries</h2>
+                    <div class="header-buttons">
+                        <button id="view-history-btn" class="btn btn-secondary btn-small">
+                            📋 View Change History
+                        </button>
+                        <button id="json-backup-btn" class="btn btn-primary btn-small">
+                            💾 Backup
+                        </button>
+                        <button id="json-restore-btn" class="btn btn-secondary btn-small">
+                            📂 Restore
+                        </button>
+                        <input type="file" id="json-file-input" accept=".json" style="display: none;">
+                    </div>
+                </div>
+                <div class="search-bar">
+                    <input type="text" id="search-input" placeholder="🔍 Search by term, definition, or abbreviation...">
+                    <select id="filter-type">
+                        <option value="">All Types</option>
+                        <option value="String">String</option>
+                        <option value="Number">Number</option>
+                        <option value="Integer">Integer</option>
+                        <option value="Float">Float</option>
+                        <option value="Boolean">Boolean</option>
+                        <option value="Date">Date</option>
+                        <option value="DateTime">DateTime</option>
+                        <option value="Array">Array</option>
+                        <option value="Object">Object</option>
+                        <option value="JSON">JSON</option>
+                        <option value="Other">Other</option>
+                    </select>
+                    <button id="clear-filters-btn" class="btn btn-secondary btn-small" style="margin-left: 10px;">✖ Clear Filters</button>
+                </div>
+            </section>
+
+            <!-- Dictionary Table Section -->
+            <section class="table-section">
+                <div class="table-container">
+                    <table id="dictionary-table">
+                        <thead>
+                            <tr>
+                                <th class="sortable" data-sort="ddId">DD ID</th>
+                                <th class="sortable" data-sort="term">Term</th>
+                                <th>Definition</th>
+                                <th class="sortable" data-sort="abbreviation">Abbreviation</th>
+                                <th class="sortable" data-sort="dataType">Data Type</th>
+                                <th>Input Format</th>
+                                <th>Variations</th>
+                                <th class="sortable" data-sort="owner">Owner</th>
+                                <th>Stewards</th>
+                                <th class="sortable" data-sort="classification">Classification</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="dictionary-tbody">
+                            <!-- Entries will be dynamically added here -->
+                        </tbody>
+                    </table>
+                    <div id="no-entries" class="no-entries" style="display:none;">
+                        <p>No entries found. Add your first entry above!</p>
+                    </div>
+                </div>
+            </section>
+        </main>
+
+        <!-- Change History Modal -->
+        <div id="history-modal" class="modal" style="display:none;">
+            <div class="modal-content modal-large">
+                <div class="modal-header">
+                    <h2>Change History</h2>
+                    <button id="close-history-btn" class="btn btn-secondary">Close</button>
+                </div>
+                <div class="history-content">
+                    <table class="history-table">
+                        <thead>
+                            <tr>
+                                <th>Timestamp</th>
+                                <th>Action</th>
+                                <th>Term</th>
+                                <th>Changes</th>
+                                <th>User</th>
+                                <th>Details</th>
+                            </tr>
+                        </thead>
+                        <tbody id="history-tbody">
+                            <!-- History entries will be dynamically added here -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Change Detail Modal -->
+        <div id="detail-modal" class="modal" style="display:none;">
+            <div class="modal-content modal-large">
+                <div class="modal-header">
+                    <h2>Change Details</h2>
+                    <button id="close-detail-btn" class="btn btn-secondary">Close</button>
+                </div>
+                <div id="detail-content" class="detail-content">
+                    <!-- Detail content will be dynamically added here -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Report Management Modal -->
+        <div id="tag-modal" class="modal" style="display:none;">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h2>Manage Reports</h2>
+                    <button id="close-tag-modal-btn" class="btn btn-secondary">Close</button>
+                </div>
+                <div class="modal-body">
+                    <div class="form-group">
+                        <label for="new-tag-name">Create New Report</label>
+                        <div style="display: flex; gap: 10px;">
+                            <input type="text" id="new-tag-name" placeholder="Report name">
+                            <input type="color" id="new-tag-color" value="#004C8E" style="width: 60px;">
+                            <button class="btn btn-primary" id="create-tag-btn">Create</button>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>Existing Reports</label>
+                        <div id="tags-list" class="tags-list">
+                            <!-- Reports will be listed here -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <footer>
+            <p>Data Dictionary Platform &copy; 2025 | Licensed under GPL-3.0</p>
+        </footer>
+    </div>
+
+    <script src="admin-api.js?v=2.0"></script>
+</body>
+</html>
