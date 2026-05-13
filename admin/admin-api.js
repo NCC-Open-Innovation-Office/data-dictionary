@@ -209,8 +209,8 @@ class DataDictionary {
         document.getElementById('classification').value = entry.classification || 'public';
         document.getElementById('discussion').value = entry.discussion || '';
         
-        // Load tags
-        this.currentEntryTags = entry.tags || [];
+        // Load tags (copy to avoid mutating the entry's tags array in this.entries)
+        this.currentEntryTags = [...(entry.tags || [])];
         this.renderEntryTags();
 
         // Load report-specific definitions
@@ -577,6 +577,16 @@ class DataDictionary {
                 actionBadge = '<span class="badge badge-update">Updated</span>';
             } else if (change.action === 'delete') {
                 actionBadge = '<span class="badge badge-delete">Deleted</span>';
+            } else if (change.action === 'tag_added') {
+                actionBadge = '<span class="badge badge-create">Tag Added</span>';
+            } else if (change.action === 'tag_removed') {
+                actionBadge = '<span class="badge badge-delete">Tag Removed</span>';
+            } else if (change.action === 'report_def_added') {
+                actionBadge = '<span class="badge badge-create">Definition Added</span>';
+            } else if (change.action === 'report_def_updated') {
+                actionBadge = '<span class="badge badge-update">Definition Updated</span>';
+            } else if (change.action === 'report_def_removed') {
+                actionBadge = '<span class="badge badge-delete">Definition Removed</span>';
             }
 
             let changes = '';
@@ -592,6 +602,16 @@ class DataDictionary {
                     }
                 }
                 changes = changedFields.length > 0 ? `Modified: ${changedFields.join(', ')}` : 'No changes detected';
+            } else if (change.action === 'tag_added' && change.newData) {
+                changes = `Report added: ${this.escapeHtml(change.newData.tag_name)}`;
+            } else if (change.action === 'tag_removed' && change.oldData) {
+                changes = `Report removed: ${this.escapeHtml(change.oldData.tag_name)}`;
+            } else if (change.action === 'report_def_added' && change.newData) {
+                changes = `Definition added for: ${this.escapeHtml(change.newData.tag_name)}`;
+            } else if (change.action === 'report_def_updated' && change.newData) {
+                changes = `Definition updated for: ${this.escapeHtml(change.newData.tag_name)}`;
+            } else if (change.action === 'report_def_removed' && change.oldData) {
+                changes = `Definition removed for: ${this.escapeHtml(change.oldData.tag_name)}`;
             }
 
             // Add discussion indicator if present
@@ -629,6 +649,11 @@ class DataDictionary {
                         ${change.action === 'create' ? '<span class="badge badge-create">Created</span>' : ''}
                         ${change.action === 'update' ? '<span class="badge badge-update">Updated</span>' : ''}
                         ${change.action === 'delete' ? '<span class="badge badge-delete">Deleted</span>' : ''}
+                        ${change.action === 'tag_added' ? '<span class="badge badge-create">Tag Added</span>' : ''}
+                        ${change.action === 'tag_removed' ? '<span class="badge badge-delete">Tag Removed</span>' : ''}
+                        ${change.action === 'report_def_added' ? '<span class="badge badge-create">Definition Added</span>' : ''}
+                        ${change.action === 'report_def_updated' ? '<span class="badge badge-update">Definition Updated</span>' : ''}
+                        ${change.action === 'report_def_removed' ? '<span class="badge badge-delete">Definition Removed</span>' : ''}
                     </div>
                     
                     <div class="detail-label">Term:</div>
@@ -714,6 +739,64 @@ class DataDictionary {
                 `;
             } else {
                 html += '<div class="no-changes">No field changes detected</div>';
+            }
+        } else if (['tag_added', 'tag_removed', 'report_def_added', 'report_def_updated', 'report_def_removed'].includes(change.action)) {
+            const isAdded = change.action === 'tag_added' || change.action === 'report_def_added';
+            const isRemoved = change.action === 'tag_removed' || change.action === 'report_def_removed';
+            const isUpdated = change.action === 'report_def_updated';
+            const isTag = change.action === 'tag_added' || change.action === 'tag_removed';
+
+            if (isUpdated && change.oldData && change.newData) {
+                html += `
+                    <div class="detail-section">
+                        <h3>Definition Change — ${this.escapeHtml(change.newData.tag_name)}</h3>
+                        <div class="change-comparison">
+                            <div class="change-column change-column-old">
+                                <h4>Before</h4>
+                                <div class="field-change">
+                                    <div class="field-name">definition</div>
+                                    <div class="field-value ${!change.oldData.definition ? 'empty-value' : ''}">
+                                        ${change.oldData.definition ? this.escapeHtml(change.oldData.definition) : '(empty)'}
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="change-column change-column-new">
+                                <h4>After</h4>
+                                <div class="field-change">
+                                    <div class="field-name">definition</div>
+                                    <div class="field-value ${!change.newData.definition ? 'empty-value' : ''}">
+                                        ${change.newData.definition ? this.escapeHtml(change.newData.definition) : '(empty)'}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            } else {
+                const data = isAdded ? change.newData : change.oldData;
+                const colClass = isAdded ? 'change-column-new' : 'change-column-old';
+                const heading = isTag
+                    ? (isAdded ? 'Report Added' : 'Report Removed')
+                    : (isAdded ? 'Definition Added' : 'Definition Removed');
+                html += `
+                    <div class="detail-section">
+                        <h3>${heading}</h3>
+                        <div class="change-column ${colClass}">
+                            <div class="field-change">
+                                <div class="field-name">report</div>
+                                <div class="field-value">${this.escapeHtml(data.tag_name)}</div>
+                            </div>
+                            ${!isTag && data.definition !== undefined ? `
+                                <div class="field-change">
+                                    <div class="field-name">definition</div>
+                                    <div class="field-value ${!data.definition ? 'empty-value' : ''}">
+                                        ${data.definition ? this.escapeHtml(data.definition) : '(empty)'}
+                                    </div>
+                                </div>
+                            ` : ''}
+                        </div>
+                    </div>
+                `;
             }
         }
 
@@ -1264,7 +1347,8 @@ class DataDictionary {
                 `• ${backup.entries.length} entries\n` +
                 `• ${(backup.tags || []).length} reports/tags\n` +
                 `• ${(backup.entry_definitions || []).length} report-specific definitions\n` +
-                `• ${(backup.entry_links || []).length} entry links\n\n` +
+                `• ${(backup.entry_links || []).length} entry links\n` +
+                `• ${(backup.change_history || []).length} change history records\n\n` +
                 `Do you want to proceed?`
             );
 
@@ -1290,7 +1374,8 @@ class DataDictionary {
                 `✅ Entries: ${result.entries}\n` +
                 `🏷️ Tags: ${result.tags}\n` +
                 `📝 Report definitions: ${result.entry_definitions}\n` +
-                `🔗 Entry links: ${result.entry_links}`
+                `🔗 Entry links: ${result.entry_links}\n` +
+                `📋 Change history records: ${result.change_history}`
             );
 
             // Reload everything

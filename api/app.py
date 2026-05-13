@@ -447,14 +447,31 @@ def add_entry_tag(entry_id):
     """Add a tag to an entry (admin only)"""
     try:
         data = request.json
+        now = datetime.utcnow().isoformat()
         conn = get_db()
         cursor = conn.cursor()
-        
+
         cursor.execute('''
             INSERT OR IGNORE INTO entry_tags (entry_id, tag_id)
             VALUES (?, ?)
         ''', (entry_id, data['tag_id']))
-        
+
+        # Log the change
+        cursor.execute('SELECT term FROM entries WHERE id = ?', (entry_id,))
+        entry_row = cursor.fetchone()
+        cursor.execute('SELECT name FROM tags WHERE id = ?', (data['tag_id'],))
+        tag_row = cursor.fetchone()
+        if entry_row and tag_row:
+            cursor.execute('''
+                INSERT INTO change_history (timestamp, action, term, oldData, newData, discussion, user)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            ''', (
+                now, 'tag_added', entry_row['term'],
+                None,
+                json.dumps({'tag_id': data['tag_id'], 'tag_name': tag_row['name']}),
+                '', data.get('user', 'Admin')
+            ))
+
         conn.commit()
         conn.close()
         return jsonify({'message': 'Tag added to entry'})
@@ -465,9 +482,30 @@ def add_entry_tag(entry_id):
 def remove_entry_tag(entry_id, tag_id):
     """Remove a tag from an entry (admin only)"""
     try:
+        now = datetime.utcnow().isoformat()
         conn = get_db()
         cursor = conn.cursor()
+
+        # Gather info before deleting for history
+        cursor.execute('SELECT term FROM entries WHERE id = ?', (entry_id,))
+        entry_row = cursor.fetchone()
+        cursor.execute('SELECT name FROM tags WHERE id = ?', (tag_id,))
+        tag_row = cursor.fetchone()
+
         cursor.execute('DELETE FROM entry_tags WHERE entry_id = ? AND tag_id = ?', (entry_id, tag_id))
+
+        # Log the change
+        if entry_row and tag_row:
+            cursor.execute('''
+                INSERT INTO change_history (timestamp, action, term, oldData, newData, discussion, user)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            ''', (
+                now, 'tag_removed', entry_row['term'],
+                json.dumps({'tag_id': tag_id, 'tag_name': tag_row['name']}),
+                None,
+                '', 'Admin'
+            ))
+
         conn.commit()
         conn.close()
         return jsonify({'message': 'Tag removed from entry'})
@@ -719,33 +757,53 @@ def add_entry_definition(entry_id):
     try:
         data = request.json
         now = datetime.utcnow().isoformat()
-        
+
         conn = get_db()
         cursor = conn.cursor()
-        
+
+        # Fetch context for history
+        cursor.execute('SELECT term FROM entries WHERE id = ?', (entry_id,))
+        entry_row = cursor.fetchone()
+        cursor.execute('SELECT name FROM tags WHERE id = ?', (data['tag_id'],))
+        tag_row = cursor.fetchone()
+
         # Check if definition already exists for this entry+tag combo
         cursor.execute('''
-            SELECT id FROM entry_definitions WHERE entry_id = ? AND tag_id = ?
+            SELECT id, definition FROM entry_definitions WHERE entry_id = ? AND tag_id = ?
         ''', (entry_id, data['tag_id']))
         existing = cursor.fetchone()
-        
+
         if existing:
+            old_definition = existing['definition']
             # Update existing
             cursor.execute('''
                 UPDATE entry_definitions SET definition = ?, updatedAt = ?
                 WHERE entry_id = ? AND tag_id = ?
             ''', (data['definition'], now, entry_id, data['tag_id']))
             def_id = existing['id']
+            action = 'report_def_updated'
+            old_data = json.dumps({'tag_id': data['tag_id'], 'tag_name': tag_row['name'] if tag_row else '', 'definition': old_definition})
+            new_data = json.dumps({'tag_id': data['tag_id'], 'tag_name': tag_row['name'] if tag_row else '', 'definition': data['definition']})
         else:
             cursor.execute('''
                 INSERT INTO entry_definitions (entry_id, tag_id, definition, createdAt, updatedAt)
                 VALUES (?, ?, ?, ?, ?)
             ''', (entry_id, data['tag_id'], data['definition'], now, now))
             def_id = cursor.lastrowid
-        
+            action = 'report_def_added'
+            old_data = None
+            new_data = json.dumps({'tag_id': data['tag_id'], 'tag_name': tag_row['name'] if tag_row else '', 'definition': data['definition']})
+
+        # Log the change
+        if entry_row:
+            cursor.execute('''
+                INSERT INTO change_history (timestamp, action, term, oldData, newData, discussion, user)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            ''', (now, action, entry_row['term'], old_data, new_data, '', data.get('user', 'Admin')))
+
         conn.commit()
         conn.close()
-        
+
         return jsonify({'id': def_id, 'message': 'Definition saved successfully'}), 201
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -776,9 +834,35 @@ def update_entry_definition(entry_id, def_id):
 def delete_entry_definition(entry_id, def_id):
     """Delete a report-specific definition"""
     try:
+        now = datetime.utcnow().isoformat()
         conn = get_db()
         cursor = conn.cursor()
+
+        # Gather info before deleting for history
+        cursor.execute('SELECT term FROM entries WHERE id = ?', (entry_id,))
+        entry_row = cursor.fetchone()
+        cursor.execute('''
+            SELECT ed.definition, t.id as tag_id, t.name as tag_name
+            FROM entry_definitions ed
+            JOIN tags t ON ed.tag_id = t.id
+            WHERE ed.id = ? AND ed.entry_id = ?
+        ''', (def_id, entry_id))
+        def_row = cursor.fetchone()
+
         cursor.execute('DELETE FROM entry_definitions WHERE id = ? AND entry_id = ?', (def_id, entry_id))
+
+        # Log the change
+        if entry_row and def_row:
+            cursor.execute('''
+                INSERT INTO change_history (timestamp, action, term, oldData, newData, discussion, user)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            ''', (
+                now, 'report_def_removed', entry_row['term'],
+                json.dumps({'tag_id': def_row['tag_id'], 'tag_name': def_row['tag_name'], 'definition': def_row['definition']}),
+                None,
+                '', 'Admin'
+            ))
+
         conn.commit()
         conn.close()
         return jsonify({'message': 'Definition deleted successfully'})
@@ -946,7 +1030,8 @@ def restore_database():
             'entries': len(data.get('entries', [])),
             'tags': len(data.get('tags', [])),
             'entry_definitions': len(data.get('entry_definitions', [])),
-            'entry_links': len(data.get('entry_links', []))
+            'entry_links': len(data.get('entry_links', [])),
+            'change_history': len(data.get('change_history', []))
         }), 200
         
     except Exception as e:
