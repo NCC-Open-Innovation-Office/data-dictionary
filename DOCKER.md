@@ -25,8 +25,9 @@
 
 ### API (Port 5001)
 - Flask REST API
-- SQLite database
-- Data persisted in `./data/` directory
+- SQLAlchemy persistence layer
+- SQLite by default, or MSSQL when `DATABASE_URL` is set
+- Local SQLite data persisted in `./data/` directory
 
 ## Configuration
 
@@ -44,6 +45,15 @@ services:
 
 ### Database Location
 By default, the database is stored in `./data/dictionary.db` on your host machine, which persists even if containers are removed.
+
+To use MSSQL instead, set `DATABASE_URL` on the `api` service. Example:
+
+```yaml
+services:
+   api:
+      environment:
+         - DATABASE_URL=mssql+pymssql://username:password@sqlserver:1433/data_dictionary
+```
 
 ## Production Deployment
 
@@ -65,6 +75,17 @@ docker-compose logs -f
 
 # Restart services
 docker-compose restart
+```
+
+## MSSQL Integration Testing
+
+The development compose file includes a disposable SQL Server service behind
+the `mssql-test` profile.
+
+```bash
+docker compose --profile mssql-test up -d sqlserver
+RUN_MSSQL_TESTS=true python -m unittest integration_tests.test_api_integration
+docker compose --profile mssql-test down
 ```
 
 ### Docker Commands
@@ -99,11 +120,14 @@ cp ./data/dictionary.db.backup ./data/dictionary.db
 docker-compose restart api
 ```
 
+For MSSQL deployments, use your standard SQL Server backup and restore process instead of copying the SQLite file.
+
 ## Environment Variables
 
 Set in `docker-compose.yml` under `api.environment`:
 - `PORT` - API port (default: 5000)
-- `DATABASE` - Database file path (default: /app/data/dictionary.db)
+- `DATABASE` - SQLite database file path shorthand (default: /app/data/dictionary.db)
+- `DATABASE_URL` - Full SQLAlchemy URL for SQLite or MSSQL
 
 ## Troubleshooting
 

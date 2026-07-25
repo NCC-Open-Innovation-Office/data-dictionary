@@ -90,7 +90,7 @@ def main():
         # Start Flask API server
         print(f"Starting Flask API server on port {API_PORT}...")
         api_process = subprocess.Popen(
-            [sys.executable, 'app.py'],
+            [sys.executable, 'wsgi.py'],
             cwd='api',
             env=os.environ.copy()
         )

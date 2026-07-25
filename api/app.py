@@ -1,1043 +1,1106 @@
-from flask import Flask, request, jsonify
-import sqlite3
-import json
 from datetime import datetime
+from datetime import timezone
+import json
 import os
 
-app = Flask(__name__)
+from flask import current_app
+from flask import Flask
+from flask import jsonify
+from flask import request
+from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.orm import selectinload
 
-DATABASE = os.environ.get('DATABASE', 'dictionary.db')
-ALLOW_DD_ID_EDIT = os.environ.get('ALLOW_DD_ID_EDIT', 'false').lower() == 'true'
+try:
+    from api.db import Database
+    from api.models import ChangeHistory
+    from api.models import Entry
+    from api.models import EntryDefinition
+    from api.models import EntryLink
+    from api.models import EntryTag
+    from api.models import Tag
+except ImportError:
+    from db import Database
+    from models import ChangeHistory
+    from models import Entry
+    from models import EntryDefinition
+    from models import EntryLink
+    from models import EntryTag
+    from models import Tag
 
-def get_db():
-    """Create a database connection"""
-    conn = sqlite3.connect(DATABASE)
-    conn.row_factory = sqlite3.Row  # Return rows as dictionaries
-    return conn
 
-def init_db():
-    """Initialize the database with required tables"""
-    conn = get_db()
-    cursor = conn.cursor()
-    
-    # Create entries table
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS entries (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            term TEXT NOT NULL,
-            definition TEXT NOT NULL,
-            abbreviation TEXT,
-            dataType TEXT,
-            inputFormat TEXT,
-            variations TEXT,
-            owner TEXT,
-            stewards TEXT,
-            classification TEXT DEFAULT 'public',
-            discussion TEXT,
-            createdAt TEXT NOT NULL,
-            updatedAt TEXT NOT NULL
+def utcnow_iso():
+    return datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
+
+
+def parse_json_field(value):
+    if not value:
+        return None
+    if isinstance(value, (dict, list)):
+        return value
+    try:
+        return json.loads(value)
+    except (TypeError, json.JSONDecodeError):
+        return value
+
+
+def json_string(value):
+    if value is None:
+        return None
+    if isinstance(value, str):
+        return value
+    return json.dumps(value)
+
+
+def normalize_classification(value):
+    classification = value or 'public'
+    if classification == 'private':
+        return 'internal'
+    return classification
+
+
+def entry_to_dict(entry, include_related=False):
+    payload = {
+        'id': entry.id,
+        'term': entry.term,
+        'definition': entry.definition,
+        'abbreviation': entry.abbreviation or '',
+        'dataType': entry.dataType or '',
+        'inputFormat': entry.inputFormat or '',
+        'variations': entry.variations or '',
+        'owner': entry.owner or '',
+        'stewards': entry.stewards or '',
+        'classification': entry.classification or 'public',
+        'discussion': entry.discussion or '',
+        'ddId': entry.ddId or '',
+        'createdAt': entry.createdAt,
+        'updatedAt': entry.updatedAt,
+    }
+    if include_related:
+        payload['tags'] = [
+            tag_to_dict(tag)
+            for tag in sorted(
+                entry.tags,
+                key=lambda item: item.name.lower(),
+            )
+        ]
+        payload['links'] = [
+            {
+                'link_id': link.id,
+                'target_entry_id': link.target_entry_id,
+                'link_type': link.link_type,
+                'target_term': (
+                    link.target_entry.term if link.target_entry else None
+                ),
+            }
+            for link in sorted(
+                entry.outgoing_links,
+                key=lambda item: item.id,
+            )
+        ]
+        payload['report_definitions'] = [
+            entry_definition_to_dict(definition)
+            for definition in sorted(
+                entry.definitions,
+                key=lambda item: (
+                    item.tag.name.lower() if item.tag else '',
+                    item.id,
+                ),
+            )
+        ]
+    return payload
+
+
+def tag_to_dict(tag):
+    return {
+        'id': tag.id,
+        'name': tag.name,
+        'color': tag.color,
+        'createdAt': tag.createdAt,
+    }
+
+
+def entry_definition_to_dict(definition):
+    return {
+        'id': definition.id,
+        'tag_id': definition.tag_id,
+        'definition': definition.definition,
+        'tag_name': definition.tag.name if definition.tag else None,
+        'tag_color': definition.tag.color if definition.tag else None,
+    }
+
+
+def history_to_dict(item):
+    return {
+        'id': item.id,
+        'timestamp': item.timestamp,
+        'action': item.action,
+        'term': item.term,
+        'oldData': parse_json_field(item.oldData),
+        'newData': parse_json_field(item.newData),
+        'discussion': item.discussion,
+        'user': item.user,
+    }
+
+
+def get_database():
+    return current_app.extensions['dd_db']
+
+
+def allow_dd_id_edit():
+    return current_app.config['ALLOW_DD_ID_EDIT']
+
+
+def create_history_record(
+    session,
+    *,
+    action,
+    term,
+    old_data,
+    new_data,
+    discussion,
+    user,
+):
+    session.add(
+        ChangeHistory(
+            timestamp=utcnow_iso(),
+            action=action,
+            term=term,
+            oldData=json_string(old_data),
+            newData=json_string(new_data),
+            discussion=discussion or '',
+            user=user or 'Admin',
         )
-    ''')
-    
-    # Add new columns if they don't exist (for existing databases)
-    try:
-        cursor.execute('ALTER TABLE entries ADD COLUMN owner TEXT')
-    except sqlite3.OperationalError:
-        pass
-    
-    try:
-        cursor.execute('ALTER TABLE entries ADD COLUMN stewards TEXT')
-    except sqlite3.OperationalError:
-        pass
-    
-    try:
-        cursor.execute('ALTER TABLE entries ADD COLUMN classification TEXT DEFAULT "public"')
-    except sqlite3.OperationalError:
-        pass
-    
-    try:
-        cursor.execute('ALTER TABLE entries ADD COLUMN ddId TEXT')
-    except sqlite3.OperationalError:
-        pass
-    
-    # Create change_history table
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS change_history (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            timestamp TEXT NOT NULL,
-            action TEXT NOT NULL,
-            term TEXT NOT NULL,
-            oldData TEXT,
-            newData TEXT,
-            discussion TEXT,
-            user TEXT NOT NULL
-        )
-    ''')
-    
-    # Create tags table
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS tags (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT NOT NULL UNIQUE,
-            color TEXT DEFAULT '#004C8E',
-            createdAt TEXT NOT NULL
-        )
-    ''')
-    
-    # Create entry_tags junction table
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS entry_tags (
-            entry_id INTEGER NOT NULL,
-            tag_id INTEGER NOT NULL,
-            PRIMARY KEY (entry_id, tag_id),
-            FOREIGN KEY (entry_id) REFERENCES entries(id) ON DELETE CASCADE,
-            FOREIGN KEY (tag_id) REFERENCES tags(id) ON DELETE CASCADE
-        )
-    ''')
-    
-    # Create entry_links table for word linking feature
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS entry_links (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            source_entry_id INTEGER NOT NULL,
-            target_entry_id INTEGER NOT NULL,
-            link_type TEXT DEFAULT 'see_also',
-            createdAt TEXT NOT NULL,
-            FOREIGN KEY (source_entry_id) REFERENCES entries(id) ON DELETE CASCADE,
-            FOREIGN KEY (target_entry_id) REFERENCES entries(id) ON DELETE CASCADE
-        )
-    ''')
-    
-    # Create entry_definitions table for report-specific definitions
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS entry_definitions (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            entry_id INTEGER NOT NULL,
-            tag_id INTEGER NOT NULL,
-            definition TEXT NOT NULL,
-            createdAt TEXT NOT NULL,
-            updatedAt TEXT NOT NULL,
-            FOREIGN KEY (entry_id) REFERENCES entries(id) ON DELETE CASCADE,
-            FOREIGN KEY (tag_id) REFERENCES tags(id) ON DELETE CASCADE
-        )
-    ''')
-    
-    # Migrate classification: private -> internal
-    cursor.execute("UPDATE entries SET classification = 'internal' WHERE classification = 'private'")
-    
-    conn.commit()
-    conn.close()
-
-# Initialize database on startup
-init_db()
-
-@app.route('/api/health', methods=['GET'])
-def health_check():
-    """Health check endpoint"""
-    return jsonify({'status': 'ok', 'message': 'API is running'})
-
-@app.route('/api/config', methods=['GET'])
-def get_config():
-    """Get application configuration"""
-    return jsonify({
-        'allowDdIdEdit': ALLOW_DD_ID_EDIT
-    })
-
-@app.route('/api/entries', methods=['GET'])
-def get_entries():
-    """Get all dictionary entries with their tags (public endpoint)"""
-    try:
-        conn = get_db()
-        cursor = conn.cursor()
-        
-        # Get all entries
-        cursor.execute('SELECT * FROM entries ORDER BY term ASC')
-        entries = [dict(row) for row in cursor.fetchall()]
-        
-        # Get tags for each entry
-        for entry in entries:
-            cursor.execute('''
-                SELECT t.id, t.name, t.color 
-                FROM tags t
-                JOIN entry_tags et ON t.id = et.tag_id
-                WHERE et.entry_id = ?
-                ORDER BY t.name
-            ''', (entry['id'],))
-            entry['tags'] = [dict(row) for row in cursor.fetchall()]
-            
-            # Get links for each entry
-            cursor.execute('''
-                SELECT el.id as link_id, el.target_entry_id, el.link_type, 
-                       e.term as target_term
-                FROM entry_links el
-                JOIN entries e ON el.target_entry_id = e.id
-                WHERE el.source_entry_id = ?
-            ''', (entry['id'],))
-            entry['links'] = [dict(row) for row in cursor.fetchall()]
-            
-            # Get report-specific definitions for each entry
-            cursor.execute('''
-                SELECT ed.id, ed.tag_id, ed.definition, t.name as tag_name, t.color as tag_color
-                FROM entry_definitions ed
-                JOIN tags t ON ed.tag_id = t.id
-                WHERE ed.entry_id = ?
-                ORDER BY t.name
-            ''', (entry['id'],))
-            entry['report_definitions'] = [dict(row) for row in cursor.fetchall()]
-        
-        conn.close()
-        return jsonify(entries)
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-@app.route('/api/entries/<int:entry_id>', methods=['GET'])
-def get_entry(entry_id):
-    """Get a single entry by ID"""
-    try:
-        conn = get_db()
-        cursor = conn.cursor()
-        cursor.execute('SELECT * FROM entries WHERE id = ?', (entry_id,))
-        entry = cursor.fetchone()
-        conn.close()
-        
-        if entry:
-            return jsonify(dict(entry))
-        else:
-            return jsonify({'error': 'Entry not found'}), 404
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-@app.route('/api/entries', methods=['POST'])
-def create_entry():
-    """Create a new entry (admin only)"""
-    try:
-        data = request.json
-        now = datetime.utcnow().isoformat()
-        
-        conn = get_db()
-        cursor = conn.cursor()
-        
-        cursor.execute('''
-            INSERT INTO entries (term, definition, abbreviation, dataType, 
-                               inputFormat, variations, owner, stewards, 
-                               classification, discussion, ddId, createdAt, updatedAt)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ''', (
-            data['term'],
-            data['definition'],
-            data.get('abbreviation', ''),
-            data.get('dataType', ''),
-            data.get('inputFormat', ''),
-            data.get('variations', ''),
-            data.get('owner', ''),
-            data.get('stewards', ''),
-            data.get('classification', 'public'),
-            data.get('discussion', ''),
-            data.get('ddId', '') if ALLOW_DD_ID_EDIT else '',
-            now,
-            now
-        ))
-        
-        entry_id = cursor.lastrowid
-        
-        # Log the change
-        cursor.execute('''
-            INSERT INTO change_history (timestamp, action, term, oldData, newData, discussion, user)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        ''', (
-            now,
-            'create',
-            data['term'],
-            None,
-            json.dumps(data),
-            data.get('discussion', ''),
-            data.get('user', 'Admin')
-        ))
-        
-        conn.commit()
-        conn.close()
-        
-        return jsonify({'id': entry_id, 'message': 'Entry created successfully'}), 201
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-@app.route('/api/entries/<int:entry_id>', methods=['PUT'])
-def update_entry(entry_id):
-    """Update an existing entry (admin only)"""
-    try:
-        data = request.json
-        now = datetime.utcnow().isoformat()
-        
-        conn = get_db()
-        cursor = conn.cursor()
-        
-        # Get old data for change tracking
-        cursor.execute('SELECT * FROM entries WHERE id = ?', (entry_id,))
-        old_entry = cursor.fetchone()
-        
-        if not old_entry:
-            conn.close()
-            return jsonify({'error': 'Entry not found'}), 404
-        
-        old_data = dict(old_entry)
-        
-        # Update the entry
-        cursor.execute('''
-            UPDATE entries
-            SET term = ?, definition = ?, abbreviation = ?, dataType = ?, 
-                inputFormat = ?, variations = ?, owner = ?, stewards = ?,
-                classification = ?, discussion = ?, ddId = ?, updatedAt = ?
-            WHERE id = ?
-        ''', (
-            data['term'],
-            data['definition'],
-            data.get('abbreviation', ''),
-            data.get('dataType', ''),
-            data.get('inputFormat', ''),
-            data.get('variations', ''),
-            data.get('owner', ''),
-            data.get('stewards', ''),
-            data.get('classification', 'public'),
-            data.get('discussion', ''),
-            data.get('ddId', old_data.get('ddId', '')) if ALLOW_DD_ID_EDIT else old_data.get('ddId', ''),
-            now,
-            entry_id
-        ))
-        
-        # Log the change
-        cursor.execute('''
-            INSERT INTO change_history (timestamp, action, term, oldData, newData, discussion, user)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        ''', (
-            now,
-            'update',
-            data['term'],
-            json.dumps(old_data),
-            json.dumps(data),
-            data.get('discussion', ''),
-            data.get('user', 'Admin')
-        ))
-        
-        conn.commit()
-        conn.close()
-        
-        return jsonify({'message': 'Entry updated successfully'})
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-@app.route('/api/entries/<int:entry_id>', methods=['DELETE'])
-def delete_entry(entry_id):
-    """Delete an entry (admin only)"""
-    try:
-        conn = get_db()
-        cursor = conn.cursor()
-        
-        # Get entry data before deletion for logging
-        cursor.execute('SELECT * FROM entries WHERE id = ?', (entry_id,))
-        entry = cursor.fetchone()
-        
-        if not entry:
-            conn.close()
-            return jsonify({'error': 'Entry not found'}), 404
-        
-        entry_data = dict(entry)
-        now = datetime.utcnow().isoformat()
-        
-        # Delete the entry
-        cursor.execute('DELETE FROM entries WHERE id = ?', (entry_id,))
-        
-        # Log the change
-        cursor.execute('''
-            INSERT INTO change_history (timestamp, action, term, oldData, newData, discussion, user)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        ''', (
-            now,
-            'delete',
-            entry_data['term'],
-            json.dumps(entry_data),
-            None,
-            request.json.get('discussion', '') if request.json else '',
-            request.json.get('user', 'Admin') if request.json else 'Admin'
-        ))
-        
-        conn.commit()
-        conn.close()
-        
-        return jsonify({'message': 'Entry deleted successfully'})
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-@app.route('/api/history', methods=['GET'])
-def get_history():
-    """Get change history (admin only)"""
-    try:
-        conn = get_db()
-        cursor = conn.cursor()
-        cursor.execute('SELECT * FROM change_history ORDER BY timestamp DESC')
-        history = [dict(row) for row in cursor.fetchall()]
-        
-        # Parse JSON strings back to objects
-        for item in history:
-            if item['oldData']:
-                item['oldData'] = json.loads(item['oldData'])
-            if item['newData']:
-                item['newData'] = json.loads(item['newData'])
-        
-        conn.close()
-        return jsonify(history)
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-# Tag management endpoints
-@app.route('/api/tags', methods=['GET'])
-def get_tags():
-    """Get all tags"""
-    try:
-        conn = get_db()
-        cursor = conn.cursor()
-        cursor.execute('SELECT * FROM tags ORDER BY name ASC')
-        tags = [dict(row) for row in cursor.fetchall()]
-        conn.close()
-        return jsonify(tags)
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-@app.route('/api/tags', methods=['POST'])
-def create_tag():
-    """Create a new tag (admin only)"""
-    try:
-        data = request.json
-        now = datetime.utcnow().isoformat()
-        
-        conn = get_db()
-        cursor = conn.cursor()
-        
-        cursor.execute('''
-            INSERT INTO tags (name, color, createdAt)
-            VALUES (?, ?, ?)
-        ''', (
-            data['name'],
-            data.get('color', '#004C8E'),
-            now
-        ))
-        
-        tag_id = cursor.lastrowid
-        conn.commit()
-        conn.close()
-        
-        return jsonify({'id': tag_id, 'message': 'Tag created successfully'}), 201
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-@app.route('/api/tags/<int:tag_id>', methods=['DELETE'])
-def delete_tag(tag_id):
-    """Delete a tag (admin only)"""
-    try:
-        conn = get_db()
-        cursor = conn.cursor()
-        cursor.execute('DELETE FROM tags WHERE id = ?', (tag_id,))
-        conn.commit()
-        conn.close()
-        return jsonify({'message': 'Tag deleted successfully'})
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-@app.route('/api/entries/<int:entry_id>/tags', methods=['POST'])
-def add_entry_tag(entry_id):
-    """Add a tag to an entry (admin only)"""
-    try:
-        data = request.json
-        now = datetime.utcnow().isoformat()
-        conn = get_db()
-        cursor = conn.cursor()
-
-        cursor.execute('''
-            INSERT OR IGNORE INTO entry_tags (entry_id, tag_id)
-            VALUES (?, ?)
-        ''', (entry_id, data['tag_id']))
-
-        # Log the change
-        cursor.execute('SELECT term FROM entries WHERE id = ?', (entry_id,))
-        entry_row = cursor.fetchone()
-        cursor.execute('SELECT name FROM tags WHERE id = ?', (data['tag_id'],))
-        tag_row = cursor.fetchone()
-        if entry_row and tag_row:
-            cursor.execute('''
-                INSERT INTO change_history (timestamp, action, term, oldData, newData, discussion, user)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-            ''', (
-                now, 'tag_added', entry_row['term'],
-                None,
-                json.dumps({'tag_id': data['tag_id'], 'tag_name': tag_row['name']}),
-                '', data.get('user', 'Admin')
-            ))
-
-        conn.commit()
-        conn.close()
-        return jsonify({'message': 'Tag added to entry'})
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-@app.route('/api/entries/<int:entry_id>/tags/<int:tag_id>', methods=['DELETE'])
-def remove_entry_tag(entry_id, tag_id):
-    """Remove a tag from an entry (admin only)"""
-    try:
-        now = datetime.utcnow().isoformat()
-        conn = get_db()
-        cursor = conn.cursor()
-
-        # Gather info before deleting for history
-        cursor.execute('SELECT term FROM entries WHERE id = ?', (entry_id,))
-        entry_row = cursor.fetchone()
-        cursor.execute('SELECT name FROM tags WHERE id = ?', (tag_id,))
-        tag_row = cursor.fetchone()
-
-        cursor.execute('DELETE FROM entry_tags WHERE entry_id = ? AND tag_id = ?', (entry_id, tag_id))
-
-        # Log the change
-        if entry_row and tag_row:
-            cursor.execute('''
-                INSERT INTO change_history (timestamp, action, term, oldData, newData, discussion, user)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-            ''', (
-                now, 'tag_removed', entry_row['term'],
-                json.dumps({'tag_id': tag_id, 'tag_name': tag_row['name']}),
-                None,
-                '', 'Admin'
-            ))
-
-        conn.commit()
-        conn.close()
-        return jsonify({'message': 'Tag removed from entry'})
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
+    )
 
 
-@app.route('/api/owners', methods=['GET'])
-def get_owners():
-    """Get unique list of owners for autocomplete"""
-    try:
-        conn = get_db()
-        cursor = conn.cursor()
-        cursor.execute('SELECT DISTINCT owner FROM entries WHERE owner IS NOT NULL AND owner != "" ORDER BY owner')
-        owners = [row[0] for row in cursor.fetchall()]
-        conn.close()
-        return jsonify(owners)
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
+def create_app(database_url=None, initialize=True, testing=False):
+    app = Flask(__name__)
+    app.config['TESTING'] = testing
+    app.config['ALLOW_DD_ID_EDIT'] = (
+        os.environ.get('ALLOW_DD_ID_EDIT', 'false').lower() == 'true'
+    )
+
+    database = Database(database_url=database_url, testing=testing)
+    app.extensions['dd_db'] = database
+    app.teardown_appcontext(lambda exception: database.remove())
+    if initialize:
+        database.init_db()
+
+    register_routes(app)
+    return app
 
 
-@app.route('/api/stewards', methods=['GET'])
-def get_stewards():
-    """Get unique list of stewards for autocomplete"""
-    try:
-        conn = get_db()
-        cursor = conn.cursor()
-        cursor.execute('SELECT DISTINCT stewards FROM entries WHERE stewards IS NOT NULL AND stewards != "" ORDER BY stewards')
-        stewards = [row[0] for row in cursor.fetchall()]
-        conn.close()
-        return jsonify(stewards)
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
+def register_routes(app):
+    @app.route('/api/health', methods=['GET'])
+    def health_check():
+        return jsonify({'status': 'ok', 'message': 'API is running'})
 
+    @app.route('/api/config', methods=['GET'])
+    def get_config():
+        return jsonify({'allowDdIdEdit': allow_dd_id_edit()})
 
-@app.route('/api/entries/<int:entry_id>/links', methods=['GET'])
-def get_entry_links(entry_id):
-    """Get all links for an entry"""
-    try:
-        conn = get_db()
-        cursor = conn.cursor()
-        cursor.execute('''
-            SELECT el.id as link_id, el.target_entry_id, el.link_type,
-                   e.term as target_term
-            FROM entry_links el
-            JOIN entries e ON el.target_entry_id = e.id
-            WHERE el.source_entry_id = ?
-        ''', (entry_id,))
-        links = [dict(row) for row in cursor.fetchall()]
-        conn.close()
-        return jsonify(links)
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
+    @app.route('/api/entries', methods=['GET'])
+    def get_entries():
+        try:
+            with get_database().session_scope() as session:
+                entries = (
+                    session.query(Entry)
+                    .options(
+                        selectinload(Entry.tags),
+                        selectinload(Entry.outgoing_links).selectinload(
+                            EntryLink.target_entry
+                        ),
+                        selectinload(Entry.definitions).selectinload(
+                            EntryDefinition.tag
+                        ),
+                    )
+                    .order_by(Entry.term.asc())
+                    .all()
+                )
+                return jsonify(
+                    [
+                        entry_to_dict(entry, include_related=True)
+                        for entry in entries
+                    ]
+                )
+        except SQLAlchemyError as exc:
+            return jsonify({'error': str(exc)}), 500
 
+    @app.route('/api/entries/<int:entry_id>', methods=['GET'])
+    def get_entry(entry_id):
+        try:
+            with get_database().session_scope() as session:
+                entry = session.get(Entry, entry_id)
+                if not entry:
+                    return jsonify({'error': 'Entry not found'}), 404
+                return jsonify(entry_to_dict(entry))
+        except SQLAlchemyError as exc:
+            return jsonify({'error': str(exc)}), 500
 
-@app.route('/api/entries/<int:entry_id>/links', methods=['POST'])
-def add_entry_link(entry_id):
-    """Add a link to an entry"""
-    try:
-        data = request.json
-        now = datetime.utcnow().isoformat()
-        
-        conn = get_db()
-        cursor = conn.cursor()
-        
-        cursor.execute('''
-            INSERT INTO entry_links (source_entry_id, target_entry_id, link_type, createdAt)
-            VALUES (?, ?, ?, ?)
-        ''', (entry_id, data['target_entry_id'], data.get('link_type', 'see_also'), now))
-        
-        link_id = cursor.lastrowid
-        
-        # Get the target entry term
-        cursor.execute('SELECT term FROM entries WHERE id = ?', (data['target_entry_id'],))
-        target_term = cursor.fetchone()[0]
-        
-        conn.commit()
-        conn.close()
-        
-        return jsonify({
-            'link_id': link_id,
-            'target_entry_id': data['target_entry_id'],
-            'target_term': target_term,
-            'link_type': data.get('link_type', 'see_also')
-        }), 201
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
+    @app.route('/api/entries', methods=['POST'])
+    def create_entry():
+        try:
+            data = request.json or {}
+            now = utcnow_iso()
+            entry = Entry(
+                term=data['term'],
+                definition=data['definition'],
+                abbreviation=data.get('abbreviation', ''),
+                dataType=data.get('dataType', ''),
+                inputFormat=data.get('inputFormat', ''),
+                variations=data.get('variations', ''),
+                owner=data.get('owner', ''),
+                stewards=data.get('stewards', ''),
+                classification=normalize_classification(
+                    data.get('classification', 'public')
+                ),
+                discussion=data.get('discussion', ''),
+                ddId=(
+                    data.get('ddId', '') if allow_dd_id_edit() else ''
+                ),
+                createdAt=now,
+                updatedAt=now,
+            )
 
+            with get_database().session_scope() as session:
+                session.add(entry)
+                session.flush()
+                create_history_record(
+                    session,
+                    action='create',
+                    term=entry.term,
+                    old_data=None,
+                    new_data=data,
+                    discussion=data.get('discussion', ''),
+                    user=data.get('user', 'Admin'),
+                )
+                return jsonify(
+                    {
+                        'id': entry.id,
+                        'message': 'Entry created successfully',
+                    }
+                ), 201
+        except (KeyError, TypeError) as exc:
+            return jsonify({'error': str(exc)}), 400
+        except SQLAlchemyError as exc:
+            return jsonify({'error': str(exc)}), 500
 
-@app.route('/api/entries/<int:entry_id>/links/<int:link_id>', methods=['DELETE'])
-def remove_entry_link(entry_id, link_id):
-    """Remove a link from an entry"""
-    try:
-        conn = get_db()
-        cursor = conn.cursor()
-        cursor.execute('DELETE FROM entry_links WHERE id = ? AND source_entry_id = ?', (link_id, entry_id))
-        conn.commit()
-        conn.close()
-        return jsonify({'message': 'Link removed successfully'})
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
+    @app.route('/api/entries/<int:entry_id>', methods=['PUT'])
+    def update_entry(entry_id):
+        try:
+            data = request.json or {}
+            now = utcnow_iso()
 
+            with get_database().session_scope() as session:
+                entry = session.get(Entry, entry_id)
+                if not entry:
+                    return jsonify({'error': 'Entry not found'}), 404
 
-@app.route('/api/entries/bulk-import', methods=['POST'])
-def bulk_import_entries():
-    """Bulk import entries from CSV data (for Excel restore functionality)"""
-    try:
-        data = request.json
-        entries = data.get('entries', [])
-        
-        if not entries:
-            return jsonify({'error': 'No entries provided'}), 400
-        
-        conn = get_db()
-        cursor = conn.cursor()
-        
-        imported = 0
-        updated = 0
-        skipped = 0
-        errors = []
-        
-        for entry in entries:
-            try:
-                term = entry.get('term', '').strip()
-                if not term:
-                    skipped += 1
-                    continue
-                
-                # Check if entry exists
-                cursor.execute('SELECT id FROM entries WHERE term = ?', (term,))
-                existing = cursor.fetchone()
-                
-                now = datetime.utcnow().isoformat()
-                
-                if existing:
-                    # Update existing entry
-                    cursor.execute('''
-                        UPDATE entries 
-                        SET definition = ?, abbreviation = ?, dataType = ?,
-                            inputFormat = ?, variations = ?, owner = ?,
-                            stewards = ?, classification = ?, discussion = ?,
-                            ddId = ?, updatedAt = ?
-                        WHERE term = ?
-                    ''', (
-                        entry.get('definition', ''),
-                        entry.get('abbreviation', ''),
-                        entry.get('dataType', ''),
-                        entry.get('inputFormat', ''),
-                        entry.get('variations', ''),
-                        entry.get('owner', ''),
-                        entry.get('stewards', ''),
-                        entry.get('classification', 'public'),
-                        entry.get('discussion', ''),
-                        entry.get('ddId', ''),
-                        now,
-                        term
-                    ))
-                    updated += 1
-                else:
-                    # Insert new entry
-                    cursor.execute('''
-                        INSERT INTO entries (term, definition, abbreviation, dataType, 
-                                           inputFormat, variations, owner, stewards, 
-                                           classification, discussion, ddId, createdAt, updatedAt)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    ''', (
-                        term,
-                        entry.get('definition', ''),
-                        entry.get('abbreviation', ''),
-                        entry.get('dataType', ''),
-                        entry.get('inputFormat', ''),
-                        entry.get('variations', ''),
-                        entry.get('owner', ''),
-                        entry.get('stewards', ''),
-                        entry.get('classification', 'public'),
-                        entry.get('discussion', ''),
-                        entry.get('ddId', ''),
-                        now,
-                        now
-                    ))
-                    imported += 1
-                
-                # Handle reports/tags from CSV
-                reports_str = entry.get('reports', '').strip()
-                if reports_str:
-                    # Get the entry ID
-                    if existing:
-                        eid = existing['id']
-                    else:
-                        eid = cursor.lastrowid
-                    
-                    tag_names = [t.strip() for t in reports_str.split(',') if t.strip()]
-                    for tag_name in tag_names:
-                        # Find or create the tag
-                        cursor.execute('SELECT id FROM tags WHERE name = ?', (tag_name,))
-                        tag_row = cursor.fetchone()
-                        if tag_row:
-                            tag_id = tag_row['id']
+                old_data = entry_to_dict(entry)
+                entry.term = data['term']
+                entry.definition = data['definition']
+                entry.abbreviation = data.get('abbreviation', '')
+                entry.dataType = data.get('dataType', '')
+                entry.inputFormat = data.get('inputFormat', '')
+                entry.variations = data.get('variations', '')
+                entry.owner = data.get('owner', '')
+                entry.stewards = data.get('stewards', '')
+                entry.classification = normalize_classification(
+                    data.get('classification', 'public')
+                )
+                entry.discussion = data.get('discussion', '')
+                if allow_dd_id_edit():
+                    entry.ddId = data.get('ddId', old_data.get('ddId', ''))
+                entry.updatedAt = now
+
+                create_history_record(
+                    session,
+                    action='update',
+                    term=entry.term,
+                    old_data=old_data,
+                    new_data=data,
+                    discussion=data.get('discussion', ''),
+                    user=data.get('user', 'Admin'),
+                )
+                return jsonify({'message': 'Entry updated successfully'})
+        except (KeyError, TypeError) as exc:
+            return jsonify({'error': str(exc)}), 400
+        except SQLAlchemyError as exc:
+            return jsonify({'error': str(exc)}), 500
+
+    @app.route('/api/entries/<int:entry_id>', methods=['DELETE'])
+    def delete_entry(entry_id):
+        try:
+            payload = request.json or {}
+            with get_database().session_scope() as session:
+                entry = session.get(Entry, entry_id)
+                if not entry:
+                    return jsonify({'error': 'Entry not found'}), 404
+
+                entry_data = entry_to_dict(entry)
+                term = entry.term
+                session.delete(entry)
+                create_history_record(
+                    session,
+                    action='delete',
+                    term=term,
+                    old_data=entry_data,
+                    new_data=None,
+                    discussion=payload.get('discussion', ''),
+                    user=payload.get('user', 'Admin'),
+                )
+                return jsonify({'message': 'Entry deleted successfully'})
+        except SQLAlchemyError as exc:
+            return jsonify({'error': str(exc)}), 500
+
+    @app.route('/api/history', methods=['GET'])
+    def get_history():
+        try:
+            with get_database().session_scope() as session:
+                history = (
+                    session.query(ChangeHistory)
+                    .order_by(ChangeHistory.timestamp.desc())
+                    .all()
+                )
+                return jsonify([history_to_dict(item) for item in history])
+        except SQLAlchemyError as exc:
+            return jsonify({'error': str(exc)}), 500
+
+    @app.route('/api/tags', methods=['GET'])
+    def get_tags():
+        try:
+            with get_database().session_scope() as session:
+                tags = session.query(Tag).order_by(Tag.name.asc()).all()
+                return jsonify([tag_to_dict(tag) for tag in tags])
+        except SQLAlchemyError as exc:
+            return jsonify({'error': str(exc)}), 500
+
+    @app.route('/api/tags', methods=['POST'])
+    def create_tag():
+        try:
+            data = request.json or {}
+            tag = Tag(
+                name=data['name'],
+                color=data.get('color', '#004C8E'),
+                createdAt=utcnow_iso(),
+            )
+            with get_database().session_scope() as session:
+                session.add(tag)
+                session.flush()
+                return jsonify(
+                    {
+                        'id': tag.id,
+                        'message': 'Tag created successfully',
+                    }
+                ), 201
+        except (KeyError, TypeError) as exc:
+            return jsonify({'error': str(exc)}), 400
+        except SQLAlchemyError as exc:
+            return jsonify({'error': str(exc)}), 500
+
+    @app.route('/api/tags/<int:tag_id>', methods=['DELETE'])
+    def delete_tag(tag_id):
+        try:
+            with get_database().session_scope() as session:
+                tag = session.get(Tag, tag_id)
+                if not tag:
+                    return jsonify({'error': 'Tag not found'}), 404
+                session.delete(tag)
+                return jsonify({'message': 'Tag deleted successfully'})
+        except SQLAlchemyError as exc:
+            return jsonify({'error': str(exc)}), 500
+
+    @app.route('/api/entries/<int:entry_id>/tags', methods=['POST'])
+    def add_entry_tag(entry_id):
+        try:
+            data = request.json or {}
+            with get_database().session_scope() as session:
+                entry = session.get(Entry, entry_id)
+                tag = session.get(Tag, data['tag_id'])
+                if not entry:
+                    return jsonify({'error': 'Entry not found'}), 404
+                if not tag:
+                    return jsonify({'error': 'Tag not found'}), 404
+
+                exists = session.get(
+                    EntryTag,
+                    {'entry_id': entry_id, 'tag_id': data['tag_id']},
+                )
+                if not exists:
+                    session.add(
+                        EntryTag(
+                            entry_id=entry_id,
+                            tag_id=data['tag_id'],
+                        )
+                    )
+
+                create_history_record(
+                    session,
+                    action='tag_added',
+                    term=entry.term,
+                    old_data=None,
+                    new_data={'tag_id': tag.id, 'tag_name': tag.name},
+                    discussion='',
+                    user=data.get('user', 'Admin'),
+                )
+                return jsonify({'message': 'Tag added to entry'})
+        except (KeyError, TypeError) as exc:
+            return jsonify({'error': str(exc)}), 400
+        except SQLAlchemyError as exc:
+            return jsonify({'error': str(exc)}), 500
+
+    @app.route('/api/entries/<int:entry_id>/tags/<int:tag_id>',
+               methods=['DELETE'])
+    def remove_entry_tag(entry_id, tag_id):
+        try:
+            with get_database().session_scope() as session:
+                entry = session.get(Entry, entry_id)
+                tag = session.get(Tag, tag_id)
+                association = session.get(
+                    EntryTag,
+                    {'entry_id': entry_id, 'tag_id': tag_id},
+                )
+
+                if association:
+                    session.delete(association)
+
+                if entry and tag:
+                    create_history_record(
+                        session,
+                        action='tag_removed',
+                        term=entry.term,
+                        old_data={
+                            'tag_id': tag.id,
+                            'tag_name': tag.name,
+                        },
+                        new_data=None,
+                        discussion='',
+                        user='Admin',
+                    )
+
+                return jsonify({'message': 'Tag removed from entry'})
+        except SQLAlchemyError as exc:
+            return jsonify({'error': str(exc)}), 500
+
+    @app.route('/api/owners', methods=['GET'])
+    def get_owners():
+        try:
+            with get_database().session_scope() as session:
+                owners = [
+                    value
+                    for value, in session.query(Entry.owner)
+                    .filter(Entry.owner.isnot(None), Entry.owner != '')
+                    .distinct()
+                    .order_by(Entry.owner.asc())
+                    .all()
+                ]
+                return jsonify(owners)
+        except SQLAlchemyError as exc:
+            return jsonify({'error': str(exc)}), 500
+
+    @app.route('/api/stewards', methods=['GET'])
+    def get_stewards():
+        try:
+            with get_database().session_scope() as session:
+                stewards = [
+                    value
+                    for value, in session.query(Entry.stewards)
+                    .filter(Entry.stewards.isnot(None), Entry.stewards != '')
+                    .distinct()
+                    .order_by(Entry.stewards.asc())
+                    .all()
+                ]
+                return jsonify(stewards)
+        except SQLAlchemyError as exc:
+            return jsonify({'error': str(exc)}), 500
+
+    @app.route('/api/entries/<int:entry_id>/links', methods=['GET'])
+    def get_entry_links(entry_id):
+        try:
+            with get_database().session_scope() as session:
+                links = (
+                    session.query(EntryLink)
+                    .options(selectinload(EntryLink.target_entry))
+                    .filter(EntryLink.source_entry_id == entry_id)
+                    .order_by(EntryLink.id.asc())
+                    .all()
+                )
+                return jsonify(
+                    [
+                        {
+                            'link_id': link.id,
+                            'target_entry_id': link.target_entry_id,
+                            'link_type': link.link_type,
+                            'target_term': (
+                                link.target_entry.term
+                                if link.target_entry else None
+                            ),
+                        }
+                        for link in links
+                    ]
+                )
+        except SQLAlchemyError as exc:
+            return jsonify({'error': str(exc)}), 500
+
+    @app.route('/api/entries/<int:entry_id>/links', methods=['POST'])
+    def add_entry_link(entry_id):
+        try:
+            data = request.json or {}
+            with get_database().session_scope() as session:
+                target_entry = session.get(Entry, data['target_entry_id'])
+                if not target_entry:
+                    return jsonify({'error': 'Target entry not found'}), 404
+
+                link = EntryLink(
+                    source_entry_id=entry_id,
+                    target_entry_id=data['target_entry_id'],
+                    link_type=data.get('link_type', 'see_also'),
+                    createdAt=utcnow_iso(),
+                )
+                session.add(link)
+                session.flush()
+
+                return jsonify(
+                    {
+                        'link_id': link.id,
+                        'target_entry_id': data['target_entry_id'],
+                        'target_term': target_entry.term,
+                        'link_type': link.link_type,
+                    }
+                ), 201
+        except (KeyError, TypeError) as exc:
+            return jsonify({'error': str(exc)}), 400
+        except SQLAlchemyError as exc:
+            return jsonify({'error': str(exc)}), 500
+
+    @app.route('/api/entries/<int:entry_id>/links/<int:link_id>',
+               methods=['DELETE'])
+    def remove_entry_link(entry_id, link_id):
+        try:
+            with get_database().session_scope() as session:
+                link = session.get(EntryLink, link_id)
+                if link and link.source_entry_id == entry_id:
+                    session.delete(link)
+                return jsonify({'message': 'Link removed successfully'})
+        except SQLAlchemyError as exc:
+            return jsonify({'error': str(exc)}), 500
+
+    @app.route('/api/entries/bulk-import', methods=['POST'])
+    def bulk_import_entries():
+        try:
+            data = request.json or {}
+            entries = data.get('entries', [])
+            if not entries:
+                return jsonify({'error': 'No entries provided'}), 400
+
+            imported = 0
+            updated = 0
+            skipped = 0
+            errors = []
+
+            with get_database().session_scope() as session:
+                for item in entries:
+                    term = item.get('term', '').strip()
+                    try:
+                        if not term:
+                            skipped += 1
+                            continue
+
+                        existing = (
+                            session.query(Entry)
+                            .filter(Entry.term == term)
+                            .one_or_none()
+                        )
+                        now = utcnow_iso()
+
+                        if existing:
+                            existing.definition = item.get('definition', '')
+                            existing.abbreviation = item.get(
+                                'abbreviation',
+                                '',
+                            )
+                            existing.dataType = item.get('dataType', '')
+                            existing.inputFormat = item.get(
+                                'inputFormat',
+                                '',
+                            )
+                            existing.variations = item.get(
+                                'variations',
+                                '',
+                            )
+                            existing.owner = item.get('owner', '')
+                            existing.stewards = item.get('stewards', '')
+                            existing.classification = (
+                                normalize_classification(
+                                    item.get('classification', 'public')
+                                )
+                            )
+                            existing.discussion = item.get(
+                                'discussion',
+                                '',
+                            )
+                            existing.ddId = item.get('ddId', '')
+                            existing.updatedAt = now
+                            entry = existing
+                            updated += 1
                         else:
-                            cursor.execute('INSERT INTO tags (name, color, createdAt) VALUES (?, ?, ?)',
-                                         (tag_name, '#004C8E', now))
-                            tag_id = cursor.lastrowid
-                        cursor.execute('INSERT OR IGNORE INTO entry_tags (entry_id, tag_id) VALUES (?, ?)',
-                                     (eid, tag_id))
-                    
-            except Exception as e:
-                errors.append(f"Error with term '{term}': {str(e)}")
-                skipped += 1
-        
-        conn.commit()
-        conn.close()
-        
-        return jsonify({
-            'message': 'Import completed',
-            'imported': imported,
-            'updated': updated,
-            'skipped': skipped,
-            'errors': errors
-        }), 200
-        
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
+                            entry = Entry(
+                                term=term,
+                                definition=item.get('definition', ''),
+                                abbreviation=item.get('abbreviation', ''),
+                                dataType=item.get('dataType', ''),
+                                inputFormat=item.get('inputFormat', ''),
+                                variations=item.get('variations', ''),
+                                owner=item.get('owner', ''),
+                                stewards=item.get('stewards', ''),
+                                classification=normalize_classification(
+                                    item.get('classification', 'public')
+                                ),
+                                discussion=item.get('discussion', ''),
+                                ddId=item.get('ddId', ''),
+                                createdAt=now,
+                                updatedAt=now,
+                            )
+                            session.add(entry)
+                            session.flush()
+                            imported += 1
 
+                        reports_str = item.get('reports', '').strip()
+                        if reports_str:
+                            tag_names = [
+                                tag_name.strip()
+                                for tag_name in reports_str.split(',')
+                                if tag_name.strip()
+                            ]
+                            for tag_name in tag_names:
+                                tag = (
+                                    session.query(Tag)
+                                    .filter(Tag.name == tag_name)
+                                    .one_or_none()
+                                )
+                                if not tag:
+                                    tag = Tag(
+                                        name=tag_name,
+                                        color='#004C8E',
+                                        createdAt=now,
+                                    )
+                                    session.add(tag)
+                                    session.flush()
 
-# Report-specific definitions endpoints
-@app.route('/api/entries/<int:entry_id>/definitions', methods=['GET'])
-def get_entry_definitions(entry_id):
-    """Get all report-specific definitions for an entry"""
-    try:
-        conn = get_db()
-        cursor = conn.cursor()
-        cursor.execute('''
-            SELECT ed.id, ed.tag_id, ed.definition, t.name as tag_name, t.color as tag_color
-            FROM entry_definitions ed
-            JOIN tags t ON ed.tag_id = t.id
-            WHERE ed.entry_id = ?
-            ORDER BY t.name
-        ''', (entry_id,))
-        definitions = [dict(row) for row in cursor.fetchall()]
-        conn.close()
-        return jsonify(definitions)
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
+                                association = session.get(
+                                    EntryTag,
+                                    {
+                                        'entry_id': entry.id,
+                                        'tag_id': tag.id,
+                                    },
+                                )
+                                if not association:
+                                    session.add(
+                                        EntryTag(
+                                            entry_id=entry.id,
+                                            tag_id=tag.id,
+                                        )
+                                    )
+                    except (KeyError, TypeError, ValueError) as exc:
+                        errors.append(
+                            f"Error with term '{term}': {str(exc)}"
+                        )
+                        skipped += 1
 
+                return jsonify(
+                    {
+                        'message': 'Import completed',
+                        'imported': imported,
+                        'updated': updated,
+                        'skipped': skipped,
+                        'errors': errors,
+                    }
+                ), 200
+        except SQLAlchemyError as exc:
+            return jsonify({'error': str(exc)}), 500
 
-@app.route('/api/entries/<int:entry_id>/definitions', methods=['POST'])
-def add_entry_definition(entry_id):
-    """Add a report-specific definition for an entry"""
-    try:
-        data = request.json
-        now = datetime.utcnow().isoformat()
+    @app.route('/api/entries/<int:entry_id>/definitions', methods=['GET'])
+    def get_entry_definitions(entry_id):
+        try:
+            with get_database().session_scope() as session:
+                definitions = (
+                    session.query(EntryDefinition)
+                    .options(selectinload(EntryDefinition.tag))
+                    .filter(EntryDefinition.entry_id == entry_id)
+                    .join(Tag)
+                    .order_by(Tag.name.asc())
+                    .all()
+                )
+                return jsonify(
+                    [
+                        entry_definition_to_dict(definition)
+                        for definition in definitions
+                    ]
+                )
+        except SQLAlchemyError as exc:
+            return jsonify({'error': str(exc)}), 500
 
-        conn = get_db()
-        cursor = conn.cursor()
+    @app.route('/api/entries/<int:entry_id>/definitions', methods=['POST'])
+    def add_entry_definition(entry_id):
+        try:
+            data = request.json or {}
+            now = utcnow_iso()
 
-        # Fetch context for history
-        cursor.execute('SELECT term FROM entries WHERE id = ?', (entry_id,))
-        entry_row = cursor.fetchone()
-        cursor.execute('SELECT name FROM tags WHERE id = ?', (data['tag_id'],))
-        tag_row = cursor.fetchone()
+            with get_database().session_scope() as session:
+                entry = session.get(Entry, entry_id)
+                tag = session.get(Tag, data['tag_id'])
+                if not entry:
+                    return jsonify({'error': 'Entry not found'}), 404
+                if not tag:
+                    return jsonify({'error': 'Tag not found'}), 404
 
-        # Check if definition already exists for this entry+tag combo
-        cursor.execute('''
-            SELECT id, definition FROM entry_definitions WHERE entry_id = ? AND tag_id = ?
-        ''', (entry_id, data['tag_id']))
-        existing = cursor.fetchone()
+                existing = (
+                    session.query(EntryDefinition)
+                    .filter(
+                        EntryDefinition.entry_id == entry_id,
+                        EntryDefinition.tag_id == data['tag_id'],
+                    )
+                    .one_or_none()
+                )
 
-        if existing:
-            old_definition = existing['definition']
-            # Update existing
-            cursor.execute('''
-                UPDATE entry_definitions SET definition = ?, updatedAt = ?
-                WHERE entry_id = ? AND tag_id = ?
-            ''', (data['definition'], now, entry_id, data['tag_id']))
-            def_id = existing['id']
-            action = 'report_def_updated'
-            old_data = json.dumps({'tag_id': data['tag_id'], 'tag_name': tag_row['name'] if tag_row else '', 'definition': old_definition})
-            new_data = json.dumps({'tag_id': data['tag_id'], 'tag_name': tag_row['name'] if tag_row else '', 'definition': data['definition']})
-        else:
-            cursor.execute('''
-                INSERT INTO entry_definitions (entry_id, tag_id, definition, createdAt, updatedAt)
-                VALUES (?, ?, ?, ?, ?)
-            ''', (entry_id, data['tag_id'], data['definition'], now, now))
-            def_id = cursor.lastrowid
-            action = 'report_def_added'
-            old_data = None
-            new_data = json.dumps({'tag_id': data['tag_id'], 'tag_name': tag_row['name'] if tag_row else '', 'definition': data['definition']})
+                if existing:
+                    old_definition = existing.definition
+                    existing.definition = data['definition']
+                    existing.updatedAt = now
+                    definition_id = existing.id
+                    action = 'report_def_updated'
+                    old_data = {
+                        'tag_id': tag.id,
+                        'tag_name': tag.name,
+                        'definition': old_definition,
+                    }
+                    new_data = {
+                        'tag_id': tag.id,
+                        'tag_name': tag.name,
+                        'definition': data['definition'],
+                    }
+                else:
+                    definition = EntryDefinition(
+                        entry_id=entry_id,
+                        tag_id=data['tag_id'],
+                        definition=data['definition'],
+                        createdAt=now,
+                        updatedAt=now,
+                    )
+                    session.add(definition)
+                    session.flush()
+                    definition_id = definition.id
+                    action = 'report_def_added'
+                    old_data = None
+                    new_data = {
+                        'tag_id': tag.id,
+                        'tag_name': tag.name,
+                        'definition': data['definition'],
+                    }
 
-        # Log the change
-        if entry_row:
-            cursor.execute('''
-                INSERT INTO change_history (timestamp, action, term, oldData, newData, discussion, user)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-            ''', (now, action, entry_row['term'], old_data, new_data, '', data.get('user', 'Admin')))
+                create_history_record(
+                    session,
+                    action=action,
+                    term=entry.term,
+                    old_data=old_data,
+                    new_data=new_data,
+                    discussion='',
+                    user=data.get('user', 'Admin'),
+                )
 
-        conn.commit()
-        conn.close()
+                return jsonify(
+                    {
+                        'id': definition_id,
+                        'message': 'Definition saved successfully',
+                    }
+                ), 201
+        except (KeyError, TypeError) as exc:
+            return jsonify({'error': str(exc)}), 400
+        except SQLAlchemyError as exc:
+            return jsonify({'error': str(exc)}), 500
 
-        return jsonify({'id': def_id, 'message': 'Definition saved successfully'}), 201
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
+    @app.route('/api/entries/<int:entry_id>/definitions/<int:def_id>',
+               methods=['PUT'])
+    def update_entry_definition(entry_id, def_id):
+        try:
+            data = request.json or {}
+            with get_database().session_scope() as session:
+                definition = session.get(EntryDefinition, def_id)
+                if not definition or definition.entry_id != entry_id:
+                    return jsonify({'error': 'Definition not found'}), 404
+                definition.definition = data['definition']
+                definition.updatedAt = utcnow_iso()
+                return jsonify(
+                    {'message': 'Definition updated successfully'}
+                )
+        except (KeyError, TypeError) as exc:
+            return jsonify({'error': str(exc)}), 400
+        except SQLAlchemyError as exc:
+            return jsonify({'error': str(exc)}), 500
 
+    @app.route('/api/entries/<int:entry_id>/definitions/<int:def_id>',
+               methods=['DELETE'])
+    def delete_entry_definition(entry_id, def_id):
+        try:
+            with get_database().session_scope() as session:
+                definition = (
+                    session.query(EntryDefinition)
+                    .options(
+                        selectinload(EntryDefinition.tag),
+                        selectinload(EntryDefinition.entry),
+                    )
+                    .filter(
+                        EntryDefinition.id == def_id,
+                        EntryDefinition.entry_id == entry_id,
+                    )
+                    .one_or_none()
+                )
+                if not definition:
+                    return jsonify(
+                        {'message': 'Definition deleted successfully'}
+                    )
 
-@app.route('/api/entries/<int:entry_id>/definitions/<int:def_id>', methods=['PUT'])
-def update_entry_definition(entry_id, def_id):
-    """Update a report-specific definition"""
-    try:
-        data = request.json
-        now = datetime.utcnow().isoformat()
-        
-        conn = get_db()
-        cursor = conn.cursor()
-        cursor.execute('''
-            UPDATE entry_definitions SET definition = ?, updatedAt = ?
-            WHERE id = ? AND entry_id = ?
-        ''', (data['definition'], now, def_id, entry_id))
-        conn.commit()
-        conn.close()
-        
-        return jsonify({'message': 'Definition updated successfully'})
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
+                create_history_record(
+                    session,
+                    action='report_def_removed',
+                    term=definition.entry.term if definition.entry else '',
+                    old_data={
+                        'tag_id': (
+                            definition.tag.id if definition.tag else None
+                        ),
+                        'tag_name': (
+                            definition.tag.name if definition.tag else ''
+                        ),
+                        'definition': definition.definition,
+                    },
+                    new_data=None,
+                    discussion='',
+                    user='Admin',
+                )
+                session.delete(definition)
+                return jsonify({'message': 'Definition deleted successfully'})
+        except SQLAlchemyError as exc:
+            return jsonify({'error': str(exc)}), 500
 
+    @app.route('/api/backup', methods=['GET'])
+    def backup_database():
+        try:
+            with get_database().session_scope() as session:
+                entries = [
+                    entry_to_dict(entry)
+                    for entry in session.query(Entry)
+                    .order_by(Entry.id.asc())
+                    .all()
+                ]
+                tags = [
+                    tag_to_dict(tag)
+                    for tag in session.query(Tag)
+                    .order_by(Tag.id.asc())
+                    .all()
+                ]
+                entry_tags = [
+                    {
+                        'entry_id': item.entry_id,
+                        'tag_id': item.tag_id,
+                    }
+                    for item in session.query(EntryTag)
+                    .order_by(EntryTag.entry_id.asc(), EntryTag.tag_id.asc())
+                    .all()
+                ]
+                entry_links = [
+                    {
+                        'id': item.id,
+                        'source_entry_id': item.source_entry_id,
+                        'target_entry_id': item.target_entry_id,
+                        'link_type': item.link_type,
+                        'createdAt': item.createdAt,
+                    }
+                    for item in session.query(EntryLink)
+                    .order_by(EntryLink.id.asc())
+                    .all()
+                ]
+                entry_definitions = [
+                    {
+                        'id': item.id,
+                        'entry_id': item.entry_id,
+                        'tag_id': item.tag_id,
+                        'definition': item.definition,
+                        'createdAt': item.createdAt,
+                        'updatedAt': item.updatedAt,
+                    }
+                    for item in session.query(EntryDefinition)
+                    .order_by(EntryDefinition.id.asc())
+                    .all()
+                ]
+                change_history = [
+                    {
+                        'id': item.id,
+                        'timestamp': item.timestamp,
+                        'action': item.action,
+                        'term': item.term,
+                        'oldData': item.oldData,
+                        'newData': item.newData,
+                        'discussion': item.discussion,
+                        'user': item.user,
+                    }
+                    for item in session.query(ChangeHistory)
+                    .order_by(ChangeHistory.id.asc())
+                    .all()
+                ]
 
-@app.route('/api/entries/<int:entry_id>/definitions/<int:def_id>', methods=['DELETE'])
-def delete_entry_definition(entry_id, def_id):
-    """Delete a report-specific definition"""
-    try:
-        now = datetime.utcnow().isoformat()
-        conn = get_db()
-        cursor = conn.cursor()
+                return jsonify(
+                    {
+                        'version': 2,
+                        'exportedAt': utcnow_iso(),
+                        'entries': entries,
+                        'tags': tags,
+                        'entry_tags': entry_tags,
+                        'entry_links': entry_links,
+                        'entry_definitions': entry_definitions,
+                        'change_history': change_history,
+                    }
+                )
+        except SQLAlchemyError as exc:
+            return jsonify({'error': str(exc)}), 500
 
-        # Gather info before deleting for history
-        cursor.execute('SELECT term FROM entries WHERE id = ?', (entry_id,))
-        entry_row = cursor.fetchone()
-        cursor.execute('''
-            SELECT ed.definition, t.id as tag_id, t.name as tag_name
-            FROM entry_definitions ed
-            JOIN tags t ON ed.tag_id = t.id
-            WHERE ed.id = ? AND ed.entry_id = ?
-        ''', (def_id, entry_id))
-        def_row = cursor.fetchone()
+    @app.route('/api/restore', methods=['POST'])
+    def restore_database():
+        try:
+            data = request.json
+            if not data or 'entries' not in data:
+                return jsonify({'error': 'Invalid backup format'}), 400
 
-        cursor.execute('DELETE FROM entry_definitions WHERE id = ? AND entry_id = ?', (def_id, entry_id))
+            with get_database().session_scope() as session:
+                session.query(EntryDefinition).delete(
+                    synchronize_session=False
+                )
+                session.query(EntryTag).delete(synchronize_session=False)
+                session.query(EntryLink).delete(synchronize_session=False)
+                session.query(ChangeHistory).delete(
+                    synchronize_session=False
+                )
+                session.query(Entry).delete(synchronize_session=False)
+                session.query(Tag).delete(synchronize_session=False)
+                session.flush()
 
-        # Log the change
-        if entry_row and def_row:
-            cursor.execute('''
-                INSERT INTO change_history (timestamp, action, term, oldData, newData, discussion, user)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-            ''', (
-                now, 'report_def_removed', entry_row['term'],
-                json.dumps({'tag_id': def_row['tag_id'], 'tag_name': def_row['tag_name'], 'definition': def_row['definition']}),
-                None,
-                '', 'Admin'
-            ))
+                entry_id_map = {}
+                tag_id_map = {}
 
-        conn.commit()
-        conn.close()
-        return jsonify({'message': 'Definition deleted successfully'})
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
+                for tag in data.get('tags', []):
+                    restored_tag = Tag(
+                        name=tag['name'],
+                        color=tag.get('color', '#004C8E'),
+                        createdAt=tag.get('createdAt', utcnow_iso()),
+                    )
+                    session.add(restored_tag)
+                    session.flush()
+                    tag_id_map[tag['id']] = restored_tag.id
 
+                for entry in data.get('entries', []):
+                    restored_entry = Entry(
+                        term=entry['term'],
+                        definition=entry.get('definition', ''),
+                        abbreviation=entry.get('abbreviation', ''),
+                        dataType=entry.get('dataType', ''),
+                        inputFormat=entry.get('inputFormat', ''),
+                        variations=entry.get('variations', ''),
+                        owner=entry.get('owner', ''),
+                        stewards=entry.get('stewards', ''),
+                        classification=normalize_classification(
+                            entry.get('classification', 'public')
+                        ),
+                        discussion=entry.get('discussion', ''),
+                        ddId=entry.get('ddId', ''),
+                        createdAt=entry.get('createdAt', utcnow_iso()),
+                        updatedAt=entry.get('updatedAt', utcnow_iso()),
+                    )
+                    session.add(restored_entry)
+                    session.flush()
+                    entry_id_map[entry['id']] = restored_entry.id
 
-# JSON Backup endpoint
-@app.route('/api/backup', methods=['GET'])
-def backup_database():
-    """Full JSON backup of all data including tags, definitions, and links"""
-    try:
-        conn = get_db()
-        cursor = conn.cursor()
-        
-        # Get all entries
-        cursor.execute('SELECT * FROM entries ORDER BY id')
-        entries = [dict(row) for row in cursor.fetchall()]
-        
-        # Get all tags
-        cursor.execute('SELECT * FROM tags ORDER BY id')
-        tags = [dict(row) for row in cursor.fetchall()]
-        
-        # Get all entry-tag associations
-        cursor.execute('SELECT * FROM entry_tags')
-        entry_tags = [dict(row) for row in cursor.fetchall()]
-        
-        # Get all entry links
-        cursor.execute('SELECT * FROM entry_links ORDER BY id')
-        entry_links = [dict(row) for row in cursor.fetchall()]
-        
-        # Get all report-specific definitions
-        cursor.execute('SELECT * FROM entry_definitions ORDER BY id')
-        entry_definitions = [dict(row) for row in cursor.fetchall()]
-        
-        # Get change history
-        cursor.execute('SELECT * FROM change_history ORDER BY id')
-        change_history = [dict(row) for row in cursor.fetchall()]
-        
-        conn.close()
-        
-        backup = {
-            'version': 2,
-            'exportedAt': datetime.utcnow().isoformat(),
-            'entries': entries,
-            'tags': tags,
-            'entry_tags': entry_tags,
-            'entry_links': entry_links,
-            'entry_definitions': entry_definitions,
-            'change_history': change_history
-        }
-        
-        return jsonify(backup)
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
+                for association in data.get('entry_tags', []):
+                    new_entry_id = entry_id_map.get(
+                        association['entry_id']
+                    )
+                    new_tag_id = tag_id_map.get(association['tag_id'])
+                    if new_entry_id and new_tag_id:
+                        existing_link = session.get(
+                            EntryTag,
+                            {
+                                'entry_id': new_entry_id,
+                                'tag_id': new_tag_id,
+                            },
+                        )
+                        if not existing_link:
+                            session.add(
+                                EntryTag(
+                                    entry_id=new_entry_id,
+                                    tag_id=new_tag_id,
+                                )
+                            )
 
+                for link in data.get('entry_links', []):
+                    new_source = entry_id_map.get(link['source_entry_id'])
+                    new_target = entry_id_map.get(link['target_entry_id'])
+                    if new_source and new_target:
+                        session.add(
+                            EntryLink(
+                                source_entry_id=new_source,
+                                target_entry_id=new_target,
+                                link_type=link.get('link_type', 'see_also'),
+                                createdAt=link.get(
+                                    'createdAt',
+                                    utcnow_iso(),
+                                ),
+                            )
+                        )
 
-# JSON Restore endpoint
-@app.route('/api/restore', methods=['POST'])
-def restore_database():
-    """Full JSON restore - replaces all data"""
-    try:
-        data = request.json
-        
-        if not data or 'entries' not in data:
-            return jsonify({'error': 'Invalid backup format'}), 400
-        
-        conn = get_db()
-        cursor = conn.cursor()
-        
-        # Clear all existing data
-        cursor.execute('DELETE FROM entry_definitions')
-        cursor.execute('DELETE FROM entry_tags')
-        cursor.execute('DELETE FROM entry_links')
-        cursor.execute('DELETE FROM entries')
-        cursor.execute('DELETE FROM tags')
-        cursor.execute('DELETE FROM change_history')
-        
-        # Reset auto-increment counters
-        cursor.execute("DELETE FROM sqlite_sequence WHERE name IN ('entries', 'tags', 'entry_links', 'entry_definitions', 'change_history')")
-        
-        # Build ID mapping for entries and tags (old ID -> new ID)
-        entry_id_map = {}
-        tag_id_map = {}
-        
-        # Restore tags first
-        for tag in data.get('tags', []):
-            cursor.execute('''
-                INSERT INTO tags (name, color, createdAt)
-                VALUES (?, ?, ?)
-            ''', (tag['name'], tag.get('color', '#004C8E'), tag.get('createdAt', datetime.utcnow().isoformat())))
-            tag_id_map[tag['id']] = cursor.lastrowid
-        
-        # Restore entries
-        for entry in data.get('entries', []):
-            cursor.execute('''
-                INSERT INTO entries (term, definition, abbreviation, dataType,
-                                   inputFormat, variations, owner, stewards,
-                                   classification, discussion, ddId, createdAt, updatedAt)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ''', (
-                entry['term'],
-                entry.get('definition', ''),
-                entry.get('abbreviation', ''),
-                entry.get('dataType', ''),
-                entry.get('inputFormat', ''),
-                entry.get('variations', ''),
-                entry.get('owner', ''),
-                entry.get('stewards', ''),
-                entry.get('classification', 'public'),
-                entry.get('discussion', ''),
-                entry.get('ddId', ''),
-                entry.get('createdAt', datetime.utcnow().isoformat()),
-                entry.get('updatedAt', datetime.utcnow().isoformat())
-            ))
-            entry_id_map[entry['id']] = cursor.lastrowid
-        
-        # Restore entry-tag associations
-        for et in data.get('entry_tags', []):
-            new_entry_id = entry_id_map.get(et['entry_id'])
-            new_tag_id = tag_id_map.get(et['tag_id'])
-            if new_entry_id and new_tag_id:
-                cursor.execute('INSERT OR IGNORE INTO entry_tags (entry_id, tag_id) VALUES (?, ?)',
-                             (new_entry_id, new_tag_id))
-        
-        # Restore entry links
-        for link in data.get('entry_links', []):
-            new_source = entry_id_map.get(link['source_entry_id'])
-            new_target = entry_id_map.get(link['target_entry_id'])
-            if new_source and new_target:
-                cursor.execute('''
-                    INSERT INTO entry_links (source_entry_id, target_entry_id, link_type, createdAt)
-                    VALUES (?, ?, ?, ?)
-                ''', (new_source, new_target, link.get('link_type', 'see_also'),
-                      link.get('createdAt', datetime.utcnow().isoformat())))
-        
-        # Restore report-specific definitions
-        for ed in data.get('entry_definitions', []):
-            new_entry_id = entry_id_map.get(ed['entry_id'])
-            new_tag_id = tag_id_map.get(ed['tag_id'])
-            if new_entry_id and new_tag_id:
-                cursor.execute('''
-                    INSERT INTO entry_definitions (entry_id, tag_id, definition, createdAt, updatedAt)
-                    VALUES (?, ?, ?, ?, ?)
-                ''', (new_entry_id, new_tag_id, ed['definition'],
-                      ed.get('createdAt', datetime.utcnow().isoformat()),
-                      ed.get('updatedAt', datetime.utcnow().isoformat())))
-        
-        # Restore change history
-        for ch in data.get('change_history', []):
-            cursor.execute('''
-                INSERT INTO change_history (timestamp, action, term, oldData, newData, discussion, user)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-            ''', (ch['timestamp'], ch['action'], ch['term'],
-                  ch.get('oldData') if isinstance(ch.get('oldData'), str) else json.dumps(ch.get('oldData')) if ch.get('oldData') else None,
-                  ch.get('newData') if isinstance(ch.get('newData'), str) else json.dumps(ch.get('newData')) if ch.get('newData') else None,
-                  ch.get('discussion', ''),
-                  ch.get('user', 'Admin')))
-        
-        conn.commit()
-        conn.close()
-        
-        return jsonify({
-            'message': 'Restore completed successfully',
-            'entries': len(data.get('entries', [])),
-            'tags': len(data.get('tags', [])),
-            'entry_definitions': len(data.get('entry_definitions', [])),
-            'entry_links': len(data.get('entry_links', [])),
-            'change_history': len(data.get('change_history', []))
-        }), 200
-        
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
+                for definition in data.get('entry_definitions', []):
+                    new_entry_id = entry_id_map.get(definition['entry_id'])
+                    new_tag_id = tag_id_map.get(definition['tag_id'])
+                    if new_entry_id and new_tag_id:
+                        session.add(
+                            EntryDefinition(
+                                entry_id=new_entry_id,
+                                tag_id=new_tag_id,
+                                definition=definition['definition'],
+                                createdAt=definition.get(
+                                    'createdAt',
+                                    utcnow_iso(),
+                                ),
+                                updatedAt=definition.get(
+                                    'updatedAt',
+                                    utcnow_iso(),
+                                ),
+                            )
+                        )
 
+                for item in data.get('change_history', []):
+                    session.add(
+                        ChangeHistory(
+                            timestamp=item['timestamp'],
+                            action=item['action'],
+                            term=item['term'],
+                            oldData=json_string(item.get('oldData')),
+                            newData=json_string(item.get('newData')),
+                            discussion=item.get('discussion', ''),
+                            user=item.get('user', 'Admin'),
+                        )
+                    )
 
-if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 5001))
-    app.run(host='0.0.0.0', port=port, debug=False)
+                return jsonify(
+                    {
+                        'message': 'Restore completed successfully',
+                        'entries': len(data.get('entries', [])),
+                        'tags': len(data.get('tags', [])),
+                        'entry_definitions': len(
+                            data.get('entry_definitions', [])
+                        ),
+                        'entry_links': len(data.get('entry_links', [])),
+                        'change_history': len(
+                            data.get('change_history', [])
+                        ),
+                    }
+                ), 200
+        except SQLAlchemyError as exc:
+            return jsonify({'error': str(exc)}), 500

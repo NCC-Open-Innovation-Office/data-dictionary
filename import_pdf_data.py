@@ -10,14 +10,21 @@ Column mapping:
 - "Potential Values" -> inputFormat
 """
 
-import sqlite3
 import pdfplumber
-from datetime import datetime
 import sys
 import os
 
-# Use the correct database path
-DATABASE = os.environ.get('DATABASE', 'data/dictionary.db')
+from api.db import Database
+from api.models import Entry
+
+os.environ.setdefault('DATABASE', 'data/dictionary.db')
+database = Database()
+
+
+def utcnow_iso():
+    from datetime import datetime
+
+    return datetime.utcnow().isoformat()
 
 def extract_tables_from_pdf(pdf_path):
     """Extract tables from PDF using pdfplumber"""
@@ -89,7 +96,7 @@ def parse_table_data(tables):
     return entries
 
 def import_to_database(entries):
-    """Import parsed entries into the SQLite database"""
+    """Import parsed entries into the configured database"""
     if not entries:
         print("No entries to import!")
         return
@@ -98,56 +105,43 @@ def import_to_database(entries):
     print(f"Importing {len(entries)} entries into database...")
     print(f"{'='*60}\n")
     
-    conn = sqlite3.connect(DATABASE)
-    cursor = conn.cursor()
-    
-    now = datetime.utcnow().isoformat()
     imported = 0
     skipped = 0
-    
-    for entry in entries:
-        term = entry.get('term', '')
-        
-        if not term:
-            skipped += 1
-            continue
-        
-        # Check if term already exists
-        cursor.execute('SELECT id FROM entries WHERE term = ?', (term,))
-        existing = cursor.fetchone()
-        
-        if existing:
-            print(f"⚠️  Skipping '{term}' - already exists")
-            skipped += 1
-            continue
-        
-        # Insert new entry
-        cursor.execute('''
-            INSERT INTO entries (
-                term, definition, variations, discussion, inputFormat,
-                abbreviation, dataType, owner, stewards, classification,
-                createdAt, updatedAt
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ''', (
-            entry.get('term', ''),
-            entry.get('definition', ''),
-            entry.get('variations', ''),
-            entry.get('discussion', ''),
-            entry.get('inputFormat', ''),
-            '',  # abbreviation
-            '',  # dataType
-            '',  # owner
-            '',  # stewards
-            'public',  # classification
-            now,
-            now
-        ))
-        
-        print(f"✓ Imported: {term}")
-        imported += 1
-    
-    conn.commit()
-    conn.close()
+
+    with database.session_scope() as session:
+        for entry in entries:
+            term = entry.get('term', '')
+
+            if not term:
+                skipped += 1
+                continue
+
+            existing = session.query(Entry).filter(Entry.term == term).one_or_none()
+            if existing:
+                print(f"⚠️  Skipping '{term}' - already exists")
+                skipped += 1
+                continue
+
+            now = utcnow_iso()
+            session.add(
+                Entry(
+                    term=entry.get('term', ''),
+                    definition=entry.get('definition', ''),
+                    variations=entry.get('variations', ''),
+                    discussion=entry.get('discussion', ''),
+                    inputFormat=entry.get('inputFormat', ''),
+                    abbreviation='',
+                    dataType='',
+                    owner='',
+                    stewards='',
+                    classification='public',
+                    createdAt=now,
+                    updatedAt=now,
+                )
+            )
+
+            print(f"✓ Imported: {term}")
+            imported += 1
     
     print(f"\n{'='*60}")
     print(f"Import complete!")
@@ -163,7 +157,7 @@ def main():
         print("  2. Map columns: Plain English Entry -> Term, Definition -> Definition")
         print("     Criteria -> Variations, Usage Notes -> Discussion (backend notes)")
         print("     Potential Values -> Input Format")
-        print("  3. Import the data into dictionary.db")
+        print("  3. Import the data into the configured database")
         sys.exit(1)
     
     pdf_path = sys.argv[1]

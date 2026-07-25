@@ -9,6 +9,7 @@ A modern web-based data dictionary platform for managing organizational terms, d
 - **Tagging System**: Organize entries with color-coded reports (tags)
 - **Change History**: Track all modifications with timestamps and discussions
 - **Docker Ready**: Containerized for easy deployment
+- **SQLAlchemy Persistence**: Shared persistence layer for SQLite and MSSQL
 - **REST API**: Full API access for integrations
 
 ## 🚀 Quick Start
@@ -94,8 +95,8 @@ A modern web-based data dictionary platform for managing organizational terms, d
 └─────────────────┘    └─────────────────┘
                                 │
                        ┌─────────────────┐
-                       │   SQLite DB     │
-                       │   (Persistent)  │
+                       │ SQLAlchemy DB   │
+                       │ SQLite or MSSQL │
                        └─────────────────┘
 ```
 
@@ -105,11 +106,12 @@ A modern web-based data dictionary platform for managing organizational terms, d
 
 **API Container:**
 - `PORT`: API server port (default: 5001)
-- `DATABASE`: Database file path (default: /app/data/dictionary.db)
+- `DATABASE`: SQLite file path shorthand (default: /app/data/dictionary.db)
+- `DATABASE_URL`: Full SQLAlchemy connection URL. Example: `mssql+pymssql://username:password@sqlserver:1433/data_dictionary`
 
 ### Volume Mounts
 
-- `./data:/app/data` - Persists SQLite database
+- `./data:/app/data` - Persists SQLite database when `DATABASE_URL` is not set
 
 ## 📦 Docker Images
 
@@ -161,6 +163,22 @@ docker compose build frontend
 docker compose build api
 ```
 
+### Integration Tests
+
+Run the API integration suite against SQLite:
+
+```bash
+python -m unittest integration_tests.test_api_integration
+```
+
+Run the same suite against SQLite and the disposable SQL Server profile:
+
+```bash
+docker compose --profile mssql-test up -d sqlserver
+RUN_MSSQL_TESTS=true python -m unittest integration_tests.test_api_integration
+docker compose --profile mssql-test down
+```
+
 ## 🔄 Updates and Maintenance
 
 ### Updating to Latest Version
@@ -171,7 +189,7 @@ docker compose -f docker-compose.prod.yml up -d
 
 ### Backup Data
 ```bash
-# Backup database
+# Backup SQLite database
 cp data/dictionary.db data/dictionary.db.backup
 
 # Or backup entire data directory
@@ -200,6 +218,16 @@ docker compose logs -f frontend
 1. Check if API container is running: `docker compose ps`
 2. Check API logs: `docker compose logs api`
 3. Verify health: `curl http://localhost:5001/api/health`
+
+### MSSQL Configuration
+
+Set `DATABASE_URL` on the API service or in your shell to point at SQL Server:
+
+```bash
+export DATABASE_URL="mssql+pymssql://username:password@sqlserver:1433/data_dictionary"
+```
+
+If `DATABASE_URL` is unset, the API continues to use the existing SQLite file defined by `DATABASE`.
 
 **Frontend Issues:**
 1. Check nginx logs: `docker compose logs frontend`

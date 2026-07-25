@@ -23,6 +23,9 @@ services:
     environment:
       - PORT=5001
       - DATABASE=/app/data/dictionary.db
+      # Set DATABASE_URL to use a SQLAlchemy connection URL instead of SQLite.
+      # Example: mssql+pymssql://username:password@sqlserver:1433/data_dictionary
+      # - DATABASE_URL=mssql+pymssql://username:password@sqlserver:1433/data_dictionary
       # Set to 'true' to allow DD ID editing in admin panel (disabled by default for safety)
       # - ALLOW_DD_ID_EDIT=true
     networks:

@@ -15,11 +15,15 @@ RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
 
 # Copy application code
 COPY app.py .
+COPY db.py .
+COPY models.py .
+COPY __init__.py .
+COPY wsgi.py .
 
 # Create directory for SQLite database
 RUN mkdir -p /app/data
 
-# Set environment variable for database location
+# Default to SQLite for local persistence; set DATABASE_URL for MSSQL
 ENV DATABASE=/app/data/dictionary.db
 ENV PORT=5001
 
@@ -27,4 +31,4 @@ ENV PORT=5001
 EXPOSE 5001
 
 # Run the application
-CMD ["python", "app.py"]
+CMD ["python", "wsgi.py"]

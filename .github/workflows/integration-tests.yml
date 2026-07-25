@@ -1,0 +1,58 @@
+name: Integration Tests
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+  workflow_dispatch:
+
+jobs:
+  sqlite:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install API dependencies
+        run: pip install -r api/requirements.txt
+
+      - name: Run SQLite integration tests
+        run: python -m unittest integration_tests.test_api_integration
+
+  mssql:
+    runs-on: ubuntu-latest
+
+    services:
+      sqlserver:
+        image: mcr.microsoft.com/mssql/server:2022-latest
+        env:
+          ACCEPT_EULA: Y
+          MSSQL_PID: Developer
+          MSSQL_SA_PASSWORD: DataDictionary!234
+        ports:
+          - 14333:1433
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install API dependencies
+        run: pip install -r api/requirements.txt
+
+      - name: Run MSSQL integration tests
+        env:
+          RUN_MSSQL_TESTS: 'true'
+          MSSQL_TEST_URL: mssql+pymssql://sa:DataDictionary!234@127.0.0.1:14333/data_dictionary_test
+        run: python -m unittest integration_tests.test_api_integration
