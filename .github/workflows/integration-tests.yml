@@ -56,28 +56,11 @@ jobs:
       - name: Install API dependencies
         run: pip install -r api/requirements.txt
 
-      - name: Install pymssql
-        run: pip install pymssql
-
       - name: Verify SQL Server connectivity
-        run: |
-          python -c "
-          import pymssql, time, sys
-          for i in range(30):
-              try:
-                  conn = pymssql.connect(server='127.0.0.1', port=14333, user='sa', password='DataDictionary!234')
-                  conn.close()
-                  print('SQL Server is ready')
-                  sys.exit(0)
-              except Exception as e:
-                  print(f'Attempt {i+1}: {e}')
-                  time.sleep(2)
-          print('SQL Server never became ready')
-          sys.exit(1)
-          "
+        run: python integration_tests/wait_for_mssql.py
 
       - name: Run MSSQL integration tests
         env:
           RUN_MSSQL_TESTS: 'true'
           MSSQL_TEST_URL: mssql+pymssql://sa:DataDictionary!234@127.0.0.1:14333/data_dictionary_test
-        run: python -m unittest integration_tests.test_api_integration -v 2>&1; echo "EXIT CODE: $?"
+        run: python -m unittest integration_tests.test_api_integration -v
