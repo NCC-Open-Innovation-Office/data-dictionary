@@ -1,3 +1,13 @@
 /.vscode
 .DS_Store
 venv/
+
+# Python bytecode and cache
+__pycache__/
+*.pyc
+
+# Runtime logs
+*.log
+
+# Local SQLite database (runtime data, not source)
+dictionary.db
