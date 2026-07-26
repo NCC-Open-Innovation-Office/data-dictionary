@@ -63,7 +63,7 @@ class Tag(Base):
     __tablename__ = 'tags'
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    name = Column(Text, nullable=False, unique=True)
+    name = Column(String(255), nullable=False, unique=True)
     color = Column(
         Text,
         nullable=False,
@@ -112,7 +112,10 @@ class EntryLink(Base):
     )
     target_entry_id = Column(
         Integer,
-        ForeignKey('entries.id', ondelete='CASCADE'),
+        # ON DELETE handled by the ORM cascade on Entry.incoming_links;
+        # MSSQL rejects multiple cascade paths to the same table, so the
+        # target side uses the default NO ACTION.
+        ForeignKey('entries.id'),
         nullable=False,
     )
     link_type = Column(
