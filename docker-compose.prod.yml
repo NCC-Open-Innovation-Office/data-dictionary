@@ -1,43 +1,25 @@
+# Production Docker Compose - single container
 services:
-  # Frontend - Static site served by nginx
-  frontend:
-    image: ghcr.io/marshalmiller/data-dictionary-frontend:latest
-    container_name: data-dictionary-frontend
+  data-dictionary:
+    image: ghcr.io/marshalmiller/data-dictionary:latest
+    container_name: data-dictionary
     ports:
-      - "8000:80"
-    depends_on:
-      - api
-    networks:
-      - dictionary-network
-    restart: unless-stopped
-
-  # Backend API - Flask application
-  api:
-    image: ghcr.io/marshalmiller/data-dictionary-api:latest
-    container_name: data-dictionary-api
-    ports:
-      - "5001:5001"
+      - "8000:8000"
     volumes:
       # Persist database on host
       - ./data:/app/data
     environment:
-      - PORT=5001
+      - PORT=8000
       - DATABASE=/app/data/dictionary.db
       # Set DATABASE_URL to use a SQLAlchemy connection URL instead of SQLite.
-      # Example: mssql+pymssql://username:password@sqlserver:1433/data_dictionary
       # - DATABASE_URL=mssql+pymssql://username:password@sqlserver:1433/data_dictionary
-      # Set to 'true' to allow DD ID editing in admin panel (disabled by default for safety)
-      # - ALLOW_DD_ID_EDIT=true
-    networks:
-      - dictionary-network
+      # Auth (set AUTH_DISABLED=false behind an authenticating proxy)
+      - AUTH_DISABLED=false
+      # - ADMIN_EMAILS=alice@ncc.edu,bob@ncc.edu
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:5001/api/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 40s
-
-networks:
-  dictionary-network:
-    driver: bridge

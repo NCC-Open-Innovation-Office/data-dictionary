@@ -21,6 +21,7 @@ try:
     from api.models import EntryTag
     from api.models import Tag
 except ImportError:
+    from auth import register_auth
     from db import Database
     from models import ChangeHistory
     from models import Entry
@@ -193,7 +194,16 @@ def create_history_record(
 
 
 def create_app(database_url=None, initialize=True, testing=False):
-    app = Flask(__name__)
+    # The front-end files live in the project root (one level above the
+    # api package). Resolve that directory so Flask can serve them.
+    api_dir = os.path.dirname(os.path.abspath(__file__))
+    project_root = os.path.dirname(api_dir)
+
+    app = Flask(
+        __name__,
+        static_folder=project_root,
+        static_url_path='',
+    )
     app.config['TESTING'] = testing
     app.config['ALLOW_DD_ID_EDIT'] = (
         os.environ.get('ALLOW_DD_ID_EDIT', 'false').lower() == 'true'
@@ -1124,3 +1134,34 @@ def register_routes(app):
                 ), 200
         except SQLAlchemyError as exc:
             return jsonify({'error': str(exc)}), 500
+
+    # ------------------------------------------------------------------
+    # Front-end (SPA) static-file serving
+    # ------------------------------------------------------------------
+    # Flask's static_folder serves known files (index.html, styles.css,
+    # *.js, images) at the root. This catch-all provides SPA-style
+    # fallback: unknown non-API paths return the public index.html, and
+    # /admin(/**) returns the admin shell.
+    @app.route('/admin', methods=['GET'])
+    @app.route('/admin/', methods=['GET'])
+    @app.route('/admin/<path:subpath>', methods=['GET'])
+    def admin_shell(subpath=''):
+        # Only serve the shell for the bare /admin path or non-file paths.
+        # Requests for real admin assets (admin-api.js, admin.js) are
+        # served by the static handler.
+        if subpath and '.' in subpath.split('/')[-1]:
+            # Defer to the static file handler for real files.
+            return app.send_static_file(f'admin/{subpath}')
+        return app.send_static_file('admin/index.html')
+
+    @app.route('/', methods=['GET'])
+    def index():
+        return app.send_static_file('index.html')
+
+    @app.errorhandler(404)
+    def spa_fallback(error):
+        # Don't intercept /api/* — those are real 404s.
+        if request.path.startswith('/api/'):
+            return jsonify({'error': 'Not found'}), 404
+        # Everything else falls back to the public shell.
+        return app.send_static_file('index.html')

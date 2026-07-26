@@ -1,4 +1,4 @@
-name: Build and Publish Docker Images
+name: Build and Publish Docker Image
 
 on:
   push:
@@ -9,8 +9,7 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME_FRONTEND: ${{ github.repository }}-frontend
-  IMAGE_NAME_API: ${{ github.repository }}-api
+  IMAGE_NAME: ${{ github.repository }}
 
 jobs:
   build-and-push:
@@ -18,8 +17,6 @@ jobs:
     permissions:
       contents: read
       packages: write
-      # This is used to complete the identity challenge
-      # with sigstore/fulcio when running outside of PRs.
       id-token: write
 
     steps:
@@ -37,11 +34,11 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Extract metadata for frontend
-        id: meta-frontend
+      - name: Extract metadata
+        id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_FRONTEND }}
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
             type=ref,event=branch
             type=ref,event=pr
@@ -49,40 +46,15 @@ jobs:
             type=semver,pattern={{major}}.{{minor}}
             type=sha
 
-      - name: Extract metadata for API
-        id: meta-api
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_API }}
-          tags: |
-            type=ref,event=branch
-            type=ref,event=pr
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=sha
-
-      - name: Build and push frontend image
-        id: build-and-push-frontend
+      - name: Build and push image
+        id: build-and-push
         uses: docker/build-push-action@v5
         with:
           context: .
           file: ./Dockerfile
           push: ${{ github.event_name != 'pull_request' }}
-          tags: ${{ steps.meta-frontend.outputs.tags }}
-          labels: ${{ steps.meta-frontend.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-          platforms: linux/amd64,linux/arm64
-
-      - name: Build and push API image
-        id: build-and-push-api
-        uses: docker/build-push-action@v5
-        with:
-          context: ./api
-          file: ./api/Dockerfile
-          push: ${{ github.event_name != 'pull_request' }}
-          tags: ${{ steps.meta-api.outputs.tags }}
-          labels: ${{ steps.meta-api.outputs.labels }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
           platforms: linux/amd64,linux/arm64
@@ -91,86 +63,69 @@ jobs:
         if: github.event_name != 'pull_request'
         run: |
           mkdir -p deployment
-          cat > deployment/docker-compose.prod.yml << 'EOF'
+          cat > deployment/docker-compose.prod.yml << 'EOF_YAML'
           services:
-            frontend:
-              image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_FRONTEND }}:${{ steps.meta-frontend.outputs.version }}
-              container_name: data-dictionary-frontend
+            data-dictionary:
+              image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.version }}
+              container_name: data-dictionary
               ports:
-                - "8000:80"
-              depends_on:
-                - api
-              networks:
-                - dictionary-network
-              restart: unless-stopped
-          
-            api:
-              image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_API }}:${{ steps.meta-api.outputs.version }}
-              container_name: data-dictionary-api
-              ports:
-                - "5001:5001"
+                - "8000:8000"
               volumes:
                 - ./data:/app/data
               environment:
-                - PORT=5001
+                - PORT=8000
                 - DATABASE=/app/data/dictionary.db
-              networks:
-                - dictionary-network
+                - AUTH_DISABLED=false
               restart: unless-stopped
               healthcheck:
-                test: ["CMD", "curl", "-f", "http://localhost:5001/api/health"]
+                test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
                 interval: 30s
                 timeout: 10s
                 retries: 3
                 start_period: 40s
-          
-          networks:
-            dictionary-network:
-              driver: bridge
-          EOF
-          
-          cat > deployment/README.md << 'EOF'
+          EOF_YAML
+
+          cat > deployment/README.md << 'EOF_README'
           # Data Dictionary Deployment
-          
+
           ## Quick Start
-          
+
           1. Create a data directory:
              ```bash
              mkdir -p data
              ```
-          
+
           2. Start the application:
              ```bash
              docker compose -f docker-compose.prod.yml up -d
              ```
-          
+
           3. Access the application:
-             - Public view: http://localhost:8000
+             - Public view: http://localhost:8000/
              - Admin view: http://localhost:8000/admin/
-             - API: http://localhost:5001/api
-          
-          ## Default Admin Credentials
-          
-          - Username: `admin`
-          - Password: `admin123`
-          
-          **Important**: Change these credentials in a production environment!
-          
+             - API: http://localhost:8000/api
+
           ## Stopping the Application
-          
+
           ```bash
           docker compose -f docker-compose.prod.yml down
           ```
-          
+
           ## Data Persistence
-          
-          The SQLite database is stored in the `./data` directory and will persist between container restarts.
-          
+
+          The SQLite database is stored in the `./data` directory and
+          persists between container restarts.
+
+          ## Access Control
+
+          Set AUTH_DISABLED=false and ADMIN_EMAILS to enable role-based
+          access. See DEPLOYMENT.md for details.
+
           ## Image Tags
-          
-          - Latest stable: `${{ steps.meta-frontend.outputs.version }}`
+
+          - Latest stable: `${{ steps.meta.outputs.version }}`
           - Registry: `${{ env.REGISTRY }}`
-          EOF
+          EOF_README
 
       - name: Upload deployment artifacts
         if: github.event_name != 'pull_request'
@@ -178,32 +133,3 @@ jobs:
         with:
           name: deployment-files
           path: deployment/
-
-  security-scan:
-    runs-on: ubuntu-latest
-    needs: build-and-push
-    if: github.event_name != 'pull_request'
-    
-    steps:
-      - name: Run Trivy vulnerability scanner (Frontend)
-        uses: aquasecurity/trivy-action@master
-        with:
-          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_FRONTEND }}:${{ needs.build-and-push.outputs.frontend-version }}
-          format: 'sarif'
-          output: 'trivy-frontend-results.sarif'
-        continue-on-error: true
-
-      - name: Run Trivy vulnerability scanner (API)
-        uses: aquasecurity/trivy-action@master
-        with:
-          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_API }}:${{ needs.build-and-push.outputs.api-version }}
-          format: 'sarif'
-          output: 'trivy-api-results.sarif'
-        continue-on-error: true
-
-      - name: Upload Trivy scan results to GitHub Security tab
-        uses: github/codeql-action/upload-sarif@v2
-        if: always()
-        with:
-          sarif_file: '.'
-        continue-on-error: true

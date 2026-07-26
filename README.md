@@ -32,9 +32,9 @@ A modern web-based data dictionary platform for managing organizational terms, d
    ```
 
 4. **Access the application:**
-   - Public view: http://localhost:8000
+   - Public view: http://localhost:8000/
    - Admin view: http://localhost:8000/admin/
-   - API: http://localhost:5001/api
+   - API: http://localhost:8000/api
 
 ### Using Local Development
 
@@ -87,38 +87,43 @@ A modern web-based data dictionary platform for managing organizational terms, d
 
 ## 🏗️ Architecture
 
-```
-┌─────────────────┐    ┌─────────────────┐
-│   Frontend      │    │   Backend API   │
-│   (nginx)       │◄──►│   (Flask)       │
-│   Port 8000     │    │   Port 5001     │
-└─────────────────┘    └─────────────────┘
-                                │
-                       ┌─────────────────┐
-                       │ SQLAlchemy DB   │
-                       │ SQLite or MSSQL │
-                       └─────────────────┘
-```
+````
+┌─────────────────────────────────────────────────┐
+│            Flask app (single container)         │
+│   Static front-end + REST API, port 8000        │
+└─────────────────────────────────────────────────┘
+                        │
+               ┌─────────────────┐
+               │ SQLAlchemy DB   │
+               │ SQLite/MSSQL/   │
+               │ PostgreSQL       │
+               └─────────────────┘
+````
+
+A reverse proxy / SSO front end (Caddy, Traefik, oauth2-proxy, etc.)
+sits in front of the container for TLS termination and auth-header
+injection in production.
 
 ## 🔧 Configuration
 
 ### Environment Variables
 
-**API Container:**
-- `PORT`: API server port (default: 5001)
+- `PORT`: app port (default: 8000)
 - `DATABASE`: SQLite file path shorthand (default: /app/data/dictionary.db)
-- `DATABASE_URL`: Full SQLAlchemy connection URL. Example: `mssql+pymssql://username:password@sqlserver:1433/data_dictionary`
+- `DATABASE_URL`: Full SQLAlchemy connection URL. Examples: `mssql+pymssql://username:password@sqlserver:1433/data_dictionary`, `postgresql+psycopg2://username:password@postgres:5432/data_dictionary`
+- `AUTH_DISABLED`: bypass auth (default: `true`; set `false` behind a proxy)
+- `ADMIN_EMAILS`: comma-separated admin email allow-list
+- `AUTH_TRUSTED_EMAIL_HEADER`: header carrying the authenticated email (default: `Cf-Access-Authenticated-User-Email`)
 
 ### Volume Mounts
 
-- `./data:/app/data` - Persists SQLite database when `DATABASE_URL` is not set
+- `./data:/app/data` - Persists the SQLite database when `DATABASE_URL` is not set
 
-## 📦 Docker Images
+## 📦 Docker Image
 
-Images are automatically built and published to GitHub Container Registry:
+The image is automatically built and published to GitHub Container Registry:
 
-- **Frontend**: `ghcr.io/marshalmiller/data-dictionary-frontend:latest`
-- **API**: `ghcr.io/marshalmiller/data-dictionary-api:latest`
+- `ghcr.io/marshalmiller/data-dictionary:latest`
 
 ### Available Tags
 - `latest` - Latest stable release
@@ -131,7 +136,6 @@ Images are automatically built and published to GitHub Container Registry:
 ### Prerequisites
 - Docker and Docker Compose
 - Python 3.12+ (for local development)
-- Node.js (optional, for frontend development)
 
 ### Local Development Setup
 
@@ -146,21 +150,15 @@ Images are automatically built and published to GitHub Container Registry:
    # Using Docker (recommended)
    docker compose up -d
    
-   # Or run locally
+   # Or run locally (Flask serves both the API and the front-end)
    cd api && pip install -r requirements.txt
-   python app.py &
-   cd .. && python -m http.server 8000
+   python wsgi.py
    ```
 
-### Building Images Locally
+### Building the Image Locally
 
 ```bash
-# Build both images
 docker compose build
-
-# Build specific image
-docker compose build frontend
-docker compose build api
 ```
 
 ### Integration Tests
@@ -201,23 +199,22 @@ tar -czf data-backup-$(date +%Y%m%d).tar.gz data/
 # All services
 docker compose logs -f
 
-# Specific service
-docker compose logs -f api
-docker compose logs -f frontend
+# The app container
+docker compose logs -f data-dictionary
 ```
 
 ## 🚦 Monitoring
 
 ### Health Checks
-- API health endpoint: `http://localhost:5001/api/health`
-- Docker health check: Built into API container
+- App health endpoint: `http://localhost:8000/api/health`
+- Docker health check: Built into the container
 
 ### Troubleshooting
 
-**API Connection Issues:**
-1. Check if API container is running: `docker compose ps`
-2. Check API logs: `docker compose logs api`
-3. Verify health: `curl http://localhost:5001/api/health`
+**App Connection Issues:**
+1. Check if the container is running: `docker compose ps`
+2. Check logs: `docker compose logs data-dictionary`
+3. Verify health: `curl http://localhost:8000/api/health`
 
 ### MSSQL Configuration
 

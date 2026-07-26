@@ -1,5 +1,37 @@
-# Development Docker Compose - builds images locally
+# Development Docker Compose - single container
 services:
+  data-dictionary:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: data-dictionary
+    ports:
+      - "8000:8000"
+    volumes:
+      # Persist database on host
+      - ./data:/app/data
+    environment:
+      - PORT=8000
+      - DATABASE=/app/data/dictionary.db
+      # Set DATABASE_URL to use a SQLAlchemy connection URL instead of SQLite.
+      # Example: mssql+pymssql://username:password@sqlserver:1433/data_dictionary
+      # Example: postgresql+psycopg2://username:password@postgres:5432/data_dictionary
+      # - DATABASE_URL=mssql+pymssql://username:password@sqlserver:1433/data_dictionary
+      # Auth (set AUTH_DISABLED=false behind an authenticating proxy)
+      - AUTH_DISABLED=true
+      # - ADMIN_EMAILS=alice@ncc.edu,bob@ncc.edu
+      # Set to 'true' to allow DD ID editing in admin panel (disabled by default for safety)
+      # - ALLOW_DD_ID_EDIT=true
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Disposable SQL Server for integration testing. Activate with:
+  #   docker compose --profile mssql-test up -d sqlserver
   sqlserver:
     image: mcr.microsoft.com/mssql/server:2022-latest
     container_name: data-dictionary-sqlserver
@@ -11,56 +43,18 @@ services:
       - ACCEPT_EULA=Y
       - MSSQL_PID=Developer
       - MSSQL_SA_PASSWORD=DataDictionary!234
-    networks:
-      - dictionary-network
     restart: unless-stopped
 
-  # Frontend - Static site served by nginx
-  frontend:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: data-dictionary-frontend
+  # Disposable PostgreSQL for integration testing. Activate with:
+  #   docker compose --profile postgres-test up -d postgres
+  postgres:
+    image: postgres:16
+    container_name: data-dictionary-postgres
+    profiles:
+      - postgres-test
     ports:
-      - "8000:80"
-    depends_on:
-      - api
-    networks:
-      - dictionary-network
-    restart: unless-stopped
-
-  # Backend API - Flask application
-  api:
-    build:
-      context: ./api
-      dockerfile: Dockerfile
-    container_name: data-dictionary-api
-    ports:
-      - "5001:5001"
-    volumes:
-      # Persist database on host
-      - ./data:/app/data
+      - "54320:5432"
     environment:
-      - PORT=5001
-      - DATABASE=/app/data/dictionary.db
-      # Set DATABASE_URL to use a SQLAlchemy connection URL instead of SQLite.
-      # Example: mssql+pymssql://username:password@sqlserver:1433/data_dictionary
-      # - DATABASE_URL=mssql+pymssql://username:password@sqlserver:1433/data_dictionary
-      # Set to 'true' to allow DD ID editing in admin panel (disabled by default for safety)
-      # - ALLOW_DD_ID_EDIT=true
-    networks:
-      - dictionary-network
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
     restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:5001/api/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
-
-networks:
-  dictionary-network:
-    driver: bridge
-
-volumes:
-  dictionary-data:
