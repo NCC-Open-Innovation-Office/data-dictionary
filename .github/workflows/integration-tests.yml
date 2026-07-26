@@ -26,6 +26,9 @@ jobs:
       - name: Run SQLite integration tests
         run: python -m unittest integration_tests.test_api_integration
 
+      - name: Run auth tests
+        run: python -m unittest integration_tests.test_auth
+
   mssql:
     runs-on: ubuntu-latest
 

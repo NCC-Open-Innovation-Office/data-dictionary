@@ -12,10 +12,16 @@ class DataDictionary {
         this.sortColumn = 'term'; // Default sort column
         this.sortDirection = 'asc'; // Default sort direction (asc or desc)
         this.apiBase = '/api';
+        this.userEmail = null;
+        this.userRole = 'public'; // public | viewer | admin
         this.init();
     }
 
     async init() {
+        // Resolve the authenticated user's role first so we can gate the UI.
+        await this.loadCurrentUser();
+        this.applyRoleGating();
+
         // Load configuration first
         await this.loadConfig();
         
@@ -37,6 +43,67 @@ class DataDictionary {
         this.populateTagSelect();
         this.populateReportDefTagSelect();
         this.populateLinkSelect();
+    }
+
+    async loadCurrentUser() {
+        try {
+            const response = await fetch(`${this.apiBase}/auth/me`);
+            if (response.ok) {
+                const body = await response.json();
+                this.userEmail = body.email || null;
+                this.userRole = body.role || 'public';
+            }
+        } catch (error) {
+            // Network error or API unreachable: default to public.
+            this.userRole = 'public';
+        }
+    }
+
+    applyRoleGating() {
+        const isAdmin = this.userRole === 'admin';
+        const isViewer = this.userRole === 'viewer';
+        const authSection = document.querySelector('.auth-section');
+
+        if (isAdmin || isViewer) {
+            // Show the authenticated user and role.
+            if (authSection) {
+                const label = isAdmin ? 'Administrator' : 'Read-only';
+                const badge = document.createElement('span');
+                badge.className = 'role-badge';
+                badge.textContent = `${label} (${this.userEmail || 'unknown'})`;
+                authSection.appendChild(badge);
+            }
+        }
+
+        if (!isAdmin) {
+            // Read-only mode: hide/disable every write control.
+            const writeControls = [
+                'dictionary-form',
+                'cancel-btn',
+                'add-tag-btn',
+                'manage-tags-btn',
+                'add-link-btn',
+                'add-report-def-btn',
+                'json-restore-btn',
+                'json-file-input',
+            ];
+            writeControls.forEach((id) => {
+                const el = document.getElementById(id);
+                if (el) {
+                    el.disabled = true;
+                    el.classList.add('readonly-control');
+                }
+            });
+
+            // Hide the form section and restore input entirely.
+            const formSection = document.querySelector('.form-section');
+            if (formSection) {
+                formSection.style.display = 'none';
+            }
+
+            // Hide per-row edit/delete buttons will be handled in
+            // renderTable() via this.userRole.
+        }
     }
 
     bindEvents() {
@@ -124,7 +191,7 @@ class DataDictionary {
             stewards: document.getElementById('stewards').value.trim(),
             classification: document.getElementById('classification').value,
             discussion: document.getElementById('discussion').value.trim(),
-            user: 'Admin'  // Will be replaced with Cloudflare Access user
+            // user is resolved server-side from the authenticated session
         };
 
         // Include ddId only if editing is allowed
@@ -463,8 +530,10 @@ class DataDictionary {
                 <td>${entry.classification ? `<span class="classification-${entry.classification}">${this.escapeHtml(entry.classification.charAt(0).toUpperCase() + entry.classification.slice(1))}</span>` : '<span class="text-muted">—</span>'}</td>
                 <td>
                     <div class="actions-cell">
+                        ${this.userRole === 'admin' ? `
                         <button class="btn btn-edit" onclick="dictionary.editEntry(${actualIndex})">✏️ Edit</button>
                         <button class="btn btn-delete" onclick="dictionary.deleteEntry(${actualIndex})">🗑️ Delete</button>
+                        ` : '<span class="text-muted">Read-only</span>'}
                     </div>
                 </td>
             `;

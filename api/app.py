@@ -5,12 +5,14 @@ import os
 
 from flask import current_app
 from flask import Flask
+from flask import g
 from flask import jsonify
 from flask import request
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import selectinload
 
 try:
+    from api.auth import register_auth
     from api.db import Database
     from api.models import ChangeHistory
     from api.models import Entry
@@ -146,6 +148,23 @@ def get_database():
     return current_app.extensions['dd_db']
 
 
+def current_user():
+    """The authenticated user's email, falling back to the request body.
+
+    Resolution order:
+    1. Email set by the auth layer (g.auth_email) -- the proxy-authenticated
+       user when AUTH_DISABLED=false.
+    2. A 'user' field in the JSON request body -- preserves existing
+       client behaviour (e.g. the admin UI sending user: 'Admin').
+    3. 'Admin' so change history is never blank.
+    """
+    email = getattr(g, 'auth_email', None)
+    if email:
+        return email
+    payload = request.get_json(silent=True) or {}
+    return payload.get('user') or 'Admin'
+
+
 def allow_dd_id_edit():
     return current_app.config['ALLOW_DD_ID_EDIT']
 
@@ -186,6 +205,7 @@ def create_app(database_url=None, initialize=True, testing=False):
     if initialize:
         database.init_db()
 
+    register_auth(app)
     register_routes(app)
     return app
 
@@ -272,7 +292,7 @@ def register_routes(app):
                     old_data=None,
                     new_data=data,
                     discussion=data.get('discussion', ''),
-                    user=data.get('user', 'Admin'),
+                    user=current_user(),
                 )
                 return jsonify(
                     {
@@ -320,7 +340,7 @@ def register_routes(app):
                     old_data=old_data,
                     new_data=data,
                     discussion=data.get('discussion', ''),
-                    user=data.get('user', 'Admin'),
+                    user=current_user(),
                 )
                 return jsonify({'message': 'Entry updated successfully'})
         except (KeyError, TypeError) as exc:
@@ -347,7 +367,7 @@ def register_routes(app):
                     old_data=entry_data,
                     new_data=None,
                     discussion=payload.get('discussion', ''),
-                    user=payload.get('user', 'Admin'),
+                    user=current_user(),
                 )
                 return jsonify({'message': 'Entry deleted successfully'})
         except SQLAlchemyError as exc:
@@ -441,7 +461,7 @@ def register_routes(app):
                     old_data=None,
                     new_data={'tag_id': tag.id, 'tag_name': tag.name},
                     discussion='',
-                    user=data.get('user', 'Admin'),
+                    user=current_user(),
                 )
                 return jsonify({'message': 'Tag added to entry'})
         except (KeyError, TypeError) as exc:
@@ -475,7 +495,7 @@ def register_routes(app):
                         },
                         new_data=None,
                         discussion='',
-                        user='Admin',
+                        user=current_user(),
                     )
 
                 return jsonify({'message': 'Tag removed from entry'})
@@ -805,7 +825,7 @@ def register_routes(app):
                     old_data=old_data,
                     new_data=new_data,
                     discussion='',
-                    user=data.get('user', 'Admin'),
+                    user=current_user(),
                 )
 
                 return jsonify(
@@ -875,7 +895,7 @@ def register_routes(app):
                     },
                     new_data=None,
                     discussion='',
-                    user='Admin',
+                    user=current_user(),
                 )
                 session.delete(definition)
                 return jsonify({'message': 'Definition deleted successfully'})
@@ -1084,7 +1104,7 @@ def register_routes(app):
                             oldData=json_string(item.get('oldData')),
                             newData=json_string(item.get('newData')),
                             discussion=item.get('discussion', ''),
-                            user=item.get('user', 'Admin'),
+                            user=current_user(),
                         )
                     )
 

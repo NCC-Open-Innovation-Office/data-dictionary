@@ -1,5 +1,10 @@
-# Cloudflare Access configuration for protecting /admin/ path
-# This file tells Cloudflare Pages how to handle different paths
+# Cloudflare Access configuration for protecting the /admin/ path.
+#
+# NOTE: The app itself is reverse-proxy-agnostic and resolves roles from
+# the AUTH_TRUSTED_EMAIL_HEADER (default Cf-Access-Authenticated-User-Email).
+# This file is only used when serving the static front-end via Cloudflare
+# Pages. For other proxies (nginx, oauth2-proxy, etc.), configure path
+# protection and header forwarding in that proxy instead.
 
 # Protect the admin directory - require Cloudflare Access authentication
 /admin/*

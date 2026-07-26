@@ -119,6 +119,42 @@ Replace `your-company` with your actual Cloudflare team name.
   - SSO if configured
 - After authentication: Full admin interface with all features
 
+### Access Roles
+
+The app supports three access tiers. The role is resolved by the API
+from the reverse proxy's authenticated-user header, so the app works
+with Cloudflare Access **or** any other SSO proxy (oauth2-proxy,
+nginx auth_request, etc.) without code changes.
+
+| Role | Who | Can do |
+|------|-----|--------|
+| **public** | Anonymous (no auth) | Read all `GET` endpoints: browse, search, view entries, tags, history |
+| **viewer** | Authenticated by the proxy but not on the admin allow-list | Everything public can do, plus load the admin panel in **read-only** mode and download `/api/backup` |
+| **admin** | Authenticated and on the `ADMIN_EMAILS` allow-list | Everything, including create/update/delete entries, tags, definitions, links, bulk import, restore |
+
+#### API configuration (environment variables)
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `AUTH_DISABLED` | `true` | When `true`, auth is bypassed and all requests are treated as `public` (the default for tests and standalone local dev). Set to `false` in any deployment behind an authenticating proxy. |
+| `ADMIN_EMAILS` | *(empty)* | Comma-separated allow-list of emails granted the `admin` role. Example: `ADMIN_EMAILS=alice@ncc.edu,bob@ncc.edu` |
+| `AUTH_TRUSTED_EMAIL_HEADER` | `Cf-Access-Authenticated-User-Email` | The request header carrying the authenticated user's email. Override for non-Cloudflare proxies (e.g. `X-Forwarded-Email` for oauth2-proxy). |
+
+The proxy must overwrite this header before forwarding to the app;
+the app trusts whatever the proxy sets. Never expose the API directly
+to untrusted networks without a proxy in front.
+
+#### `GET /api/auth/me`
+
+Returns the current user's resolved role:
+
+```json
+{ "email": "alice@ncc.edu", "role": "admin", "authenticated": true }
+```
+
+The admin UI calls this on load to gate the interface: non-admin users
+get a read-only view with the edit/delete buttons hidden.
+
 ## Authentication Methods
 
 Cloudflare Access supports multiple authentication methods:
