@@ -16,6 +16,11 @@ DEFAULT_MSSQL_TEST_URL = (
     'data_dictionary_test'
 )
 
+DEFAULT_POSTGRES_TEST_URL = (
+    'postgresql+psycopg2://postgres:postgres@127.0.0.1:54320/'
+    'data_dictionary_test'
+)
+
 
 def build_targets():
     sqlite_file = tempfile.NamedTemporaryFile(
@@ -39,6 +44,18 @@ def build_targets():
                 'url': os.environ.get(
                     'MSSQL_TEST_URL',
                     DEFAULT_MSSQL_TEST_URL,
+                ),
+                'cleanup': None,
+            }
+        )
+
+    if os.environ.get('RUN_POSTGRES_TESTS', '').lower() == 'true':
+        targets.append(
+            {
+                'name': 'postgres',
+                'url': os.environ.get(
+                    'POSTGRES_TEST_URL',
+                    DEFAULT_POSTGRES_TEST_URL,
                 ),
                 'cleanup': None,
             }
@@ -121,6 +138,96 @@ def drop_mssql_database(database_url):
                 ),
                 {'database_name': database_name},
             )
+    finally:
+        engine.dispose()
+
+
+def ensure_postgres_database(database_url):
+    url = make_url(database_url)
+    admin_url = url.set(database='postgres')
+    engine = create_engine(
+        admin_url.render_as_string(hide_password=False),
+        future=True,
+        pool_pre_ping=True,
+        isolation_level='AUTOCOMMIT',
+    )
+    database_name = url.database
+    safe_database_name = database_name.replace("'", "''")
+    try:
+        with engine.connect() as connection:
+            exists = connection.execute(
+                text('SELECT 1 FROM pg_database WHERE datname = :db'),
+                {'db': database_name},
+            ).scalar()
+            if not exists:
+                connection.execute(
+                    text(f'CREATE DATABASE "{safe_database_name}"'),
+                )
+    finally:
+        engine.dispose()
+
+
+def wait_for_postgres_server(database_url, attempts=30, delay_seconds=2):
+    url = make_url(database_url)
+    admin_url = url.set(database='postgres')
+
+    last_error = None
+    for _ in range(attempts):
+        engine = create_engine(
+            admin_url.render_as_string(hide_password=False),
+            future=True,
+            pool_pre_ping=True,
+        )
+        try:
+            with engine.connect() as connection:
+                connection.execute(text('SELECT 1'))
+                return
+        except Exception as exc:
+            last_error = exc
+            time.sleep(delay_seconds)
+        finally:
+            engine.dispose()
+
+    raise RuntimeError(
+        'Timed out waiting for PostgreSQL test server'
+    ) from last_error
+
+
+def drop_postgres_database(database_url):
+    url = make_url(database_url)
+    admin_url = url.set(database='postgres')
+    engine = create_engine(
+        admin_url.render_as_string(hide_password=False),
+        future=True,
+        pool_pre_ping=True,
+        isolation_level='AUTOCOMMIT',
+    )
+    database_name = url.database
+    safe_database_name = database_name.replace("'", "''")
+    try:
+        with engine.connect() as connection:
+            exists = connection.execute(
+                text('SELECT 1 FROM pg_database WHERE datname = :db'),
+                {'db': database_name},
+            ).scalar()
+            if exists:
+                connection.execute(
+                    text(
+                        f'ALTER DATABASE "{safe_database_name}" '
+                        'WITH CONNECTION LIMIT 0'
+                    ),
+                )
+                connection.execute(
+                    text(
+                        'SELECT pg_terminate_backend(pid) '
+                        'FROM pg_stat_activity '
+                        'WHERE datname = :db AND pid <> pg_backend_pid()'
+                    ),
+                    {'db': database_name},
+                )
+                connection.execute(
+                    text(f'DROP DATABASE "{safe_database_name}"'),
+                )
     finally:
         engine.dispose()
 
@@ -234,6 +341,9 @@ class ApiIntegrationTest(unittest.TestCase):
         if target['name'] == 'mssql':
             wait_for_mssql_server(database_url)
             ensure_mssql_database(database_url)
+        elif target['name'] == 'postgres':
+            wait_for_postgres_server(database_url)
+            ensure_postgres_database(database_url)
 
         app = create_app(
             database_url=database_url,
@@ -248,6 +358,8 @@ class ApiIntegrationTest(unittest.TestCase):
         database.dispose()
         if target['name'] == 'mssql':
             drop_mssql_database(target['url'])
+        elif target['name'] == 'postgres':
+            drop_postgres_database(target['url'])
 
 
 if __name__ == '__main__':
