@@ -23,11 +23,8 @@ jobs:
       - name: Install API dependencies
         run: pip install -r api/requirements.txt
 
-      - name: Run SQLite integration tests
-        run: python -m unittest integration_tests.test_api_integration
-
-      - name: Run auth tests
-        run: python -m unittest integration_tests.test_auth
+      - name: Run test suite
+        run: python -m unittest integration_tests.test_entries integration_tests.test_tags integration_tests.test_links integration_tests.test_definitions integration_tests.test_bulk_import integration_tests.test_static integration_tests.test_backup_restore integration_tests.test_auth integration_tests.test_api_integration -v
 
   mssql:
     runs-on: ubuntu-latest
