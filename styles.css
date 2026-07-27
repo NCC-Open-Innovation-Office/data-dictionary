@@ -791,3 +791,21 @@ footer {
 tr {
     transition: background-color 0.3s;
 }
+
+/* Role badge for the admin auth section */
+.role-badge {
+    display: inline-block;
+    margin-left: 12px;
+    padding: 4px 10px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 600;
+    background: #e8eef7;
+    color: #004C8E;
+}
+
+/* Dim disabled controls in read-only mode */
+.readonly-control {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
