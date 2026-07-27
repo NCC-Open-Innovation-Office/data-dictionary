@@ -1,6 +1,6 @@
 # Production Docker Compose - single container
 services:
-  data-dictionary:
+  data_dictionary:
     image: ${NEXUS}:8082/data_dictionary:${VERSION}
     ports:
       - "8001:8000"
