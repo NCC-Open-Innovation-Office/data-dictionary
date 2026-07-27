@@ -1,7 +1,7 @@
 # Production Docker Compose - single container
 services:
   data-dictionary:
-    image: ${NEXUS:-fred.northampton.edu}:8082/data_dictionary:${VERSION}
+    image: ${NEXUS}:8082/data_dictionary:${VERSION}
     ports:
       - "8001:8000"
     deploy:
@@ -20,7 +20,7 @@ services:
       - AUTH_DISABLED=false
       # - ADMIN_EMAILS=alice@ncc.edu,bob@ncc.edu
     secrets:
-      - source: data-dictionary
+      - source: data_dictionary
         target: config
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
