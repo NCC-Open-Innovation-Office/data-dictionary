@@ -2,7 +2,6 @@
 services:
   data-dictionary:
     image: ${NEXUS}:8082/data_dictionary:${VERSION}
-    container_name: data-dictionary
     ports:
       - "8001:8000"
     deploy:
