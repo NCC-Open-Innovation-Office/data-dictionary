@@ -1,7 +1,7 @@
 # Production Docker Compose - single container
 services:
   data-dictionary:
-    image: ${NEXUS:-fred.northampton.edu}:8082/data_dictionary:${VERSION:-latest}
+    image: ${NEXUS:-fred.northampton.edu}:8082/data_dictionary:${VERSION}
     ports:
       - "8001:8000"
     deploy:
