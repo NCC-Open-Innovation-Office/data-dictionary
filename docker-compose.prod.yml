@@ -11,7 +11,7 @@ services:
         delay: 20s
         order: start-first
     environment:
-      - PORT=443
+      # - PORT=443
       - DATABASE_URL=mssql+pymssql://sully_rw:4YA8E-adW.k.Aei@scarefloor.admin.northampton.edu:1433/sully
       #- DATABASE=/app/data/dictionary.db
       # Set DATABASE_URL to use a SQLAlchemy connection URL instead of SQLite.
