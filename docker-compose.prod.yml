@@ -1,21 +1,28 @@
 # Production Docker Compose - single container
 services:
   data-dictionary:
-    image: ghcr.io/marshalmiller/data-dictionary:latest
+    image: ${NEXUS}:0882/data_dictionary:${VERSION}
     container_name: data-dictionary
     ports:
-      - "8000:8000"
-    volumes:
-      # Persist database on host
-      - ./data:/app/data
+      - "8001:8000"
+    deploy:
+      mode: global
+      update_config:
+        parallelism: 1
+        delay: 20s
+        order: start-first
     environment:
-      - PORT=8000
-      - DATABASE=/app/data/dictionary.db
+      - PORT=443
+      - DATABASE_URL=mssql+pymssql://sully_rw:4YA8E-adW.k.Aei@scarefloor.admin.northampton.ede:1433/sully
+      #- DATABASE=/app/data/dictionary.db
       # Set DATABASE_URL to use a SQLAlchemy connection URL instead of SQLite.
       # - DATABASE_URL=mssql+pymssql://username:password@sqlserver:1433/data_dictionary
       # Auth (set AUTH_DISABLED=false behind an authenticating proxy)
       - AUTH_DISABLED=false
       # - ADMIN_EMAILS=alice@ncc.edu,bob@ncc.edu
+    secrets:
+      - source: data-dictionary
+        target: config
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
