@@ -12,7 +12,7 @@ services:
         order: start-first
     environment:
       - PORT=443
-      - DATABASE_URL=mssql+pymssql://sully_rw:4YA8E-adW.k.Aei@scarefloor.admin.northampton.ede:1433/sully
+      - DATABASE_URL=mssql+pymssql://sully_rw:4YA8E-adW.k.Aei@scarefloor.admin.northampton.edu:1433/sully
       #- DATABASE=/app/data/dictionary.db
       # Set DATABASE_URL to use a SQLAlchemy connection URL instead of SQLite.
       # - DATABASE_URL=mssql+pymssql://username:password@sqlserver:1433/data_dictionary
