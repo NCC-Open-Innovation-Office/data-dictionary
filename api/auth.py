@@ -117,14 +117,14 @@ def require_auth(required_role):
             if required_role == ADMIN and role != ADMIN:
                 if role == PUBLIC:
                     return jsonify(
-                        {'error': 'Authentication required 2'}
+                        {'error': 'Authentication required'}
                     ), 401
                 return jsonify(
                     {'error': 'Administrator access required'}
                 ), 403
             if required_role == VIEWER and role == PUBLIC:
                 return jsonify(
-                    {'error': 'Authentication required 3'}
+                    {'error': 'Authentication required'}
                 ), 401
             return view(*args, **kwargs)
         return wrapper
@@ -157,7 +157,7 @@ def register_auth(app):
             if role != ADMIN:
                 if role == PUBLIC:
                     return jsonify(
-                        {'error': 'Authentication required 1'}
+                        {'error': 'Authentication required'}
                     ), 401
                 return jsonify(
                     {'error': 'Administrator access required'}
@@ -169,7 +169,7 @@ def register_auth(app):
         # Everything else (viewer-gated GETs like backup, auth/me).
         role = current_role()
         if role == PUBLIC and endpoint in VIEWER_ENDPOINTS:
-            return jsonify({'error': 'Authentication required 4'}), 401
+            return jsonify({'error': 'Authentication required'}), 401
         g.auth_email = current_email()
         g.auth_role = role
         return None
