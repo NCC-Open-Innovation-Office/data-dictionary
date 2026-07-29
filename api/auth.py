@@ -169,7 +169,7 @@ def register_auth(app):
         # Everything else (viewer-gated GETs like backup, auth/me).
         role = current_role()
         if role == PUBLIC and endpoint in VIEWER_ENDPOINTS:
-            return jsonify({'error': 'Authentication required'}), 401
+            return jsonify(request.headers), 401
         g.auth_email = current_email()
         g.auth_role = role
         return None
