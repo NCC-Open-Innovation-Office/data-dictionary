@@ -24,6 +24,7 @@ RUN mkdir -p /app/data
 ENV DATABASE=/app/data/dictionary.db
 ENV PORT=8000
 ENV AUTH_DISABLED=true
+ENV PYTHONUNBUFFERED=1
 
 EXPOSE 8000
 
