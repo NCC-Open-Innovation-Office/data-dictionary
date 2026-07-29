@@ -87,11 +87,11 @@ def auth_disabled():
 
 
 def current_email():
-    app.logger,info(_trusted_email_header())
-    app.logger.info(request.headers.get(_trusted_email_header()))
+    print(_trusted_email_header(),flush=True)
+    print(request.headers.get(_trusted_email_header()),flush=True)
     """The authenticated user's email, or None if anonymous."""
     if auth_disabled():
-        app.logger.info("auth disabled")
+        print("auth disabled",flush=True)
         return None
     return request.headers.get(_trusted_email_header()) or None
 
