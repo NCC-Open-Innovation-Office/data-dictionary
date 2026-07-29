@@ -12,6 +12,7 @@ services:
         order: start-first
     environment:
       # - PORT=443
+      - AUTH_TRUSTED_EMAIL_HEADER=SSOUSER
       - DATABASE_URL=mssql+pymssql://sully_rw:4YA8E-adW.k.Aei@scarefloor.admin.northampton.edu:1433/sully
       #- DATABASE=/app/data/dictionary.db
       # Set DATABASE_URL to use a SQLAlchemy connection URL instead of SQLite.
