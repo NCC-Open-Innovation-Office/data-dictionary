@@ -54,6 +54,27 @@ def json_string(value):
     return json.dumps(value)
 
 
+def optional_json_body():
+    """Return the request's JSON body, or an empty dict if there isn't one.
+
+    `request.json` raises a 415 when the Content-Type is not JSON and a
+    400 when the body is not valid JSON, so it cannot be combined with
+    `or {}` to mean "the body is optional". This helper tolerates a
+    missing, empty, or malformed body and simply returns {}.
+
+    Endpoints that require fields (for example `data['tag_id']`) still
+    fail loudly with a KeyError, which the route handlers translate into
+    a 400 response.
+    """
+    if not request.is_json:
+        return {}
+    try:
+        data = request.get_json(silent=True)
+    except Exception:
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
 def normalize_classification(value):
     classification = value or 'public'
     if classification == 'private':
@@ -270,7 +291,7 @@ def register_routes(app):
     @app.route('/api/entries', methods=['POST'])
     def create_entry():
         try:
-            data = request.json or {}
+            data = optional_json_body()
             now = utcnow_iso()
             entry = Entry(
                 term=data['term'],
@@ -318,7 +339,7 @@ def register_routes(app):
     @app.route('/api/entries/<int:entry_id>', methods=['PUT'])
     def update_entry(entry_id):
         try:
-            data = request.json or {}
+            data = optional_json_body()
             now = utcnow_iso()
 
             with get_database().session_scope() as session:
@@ -361,7 +382,7 @@ def register_routes(app):
     @app.route('/api/entries/<int:entry_id>', methods=['DELETE'])
     def delete_entry(entry_id):
         try:
-            payload = request.json or {}
+            payload = optional_json_body()
             with get_database().session_scope() as session:
                 entry = session.get(Entry, entry_id)
                 if not entry:
@@ -408,7 +429,7 @@ def register_routes(app):
     @app.route('/api/tags', methods=['POST'])
     def create_tag():
         try:
-            data = request.json or {}
+            data = optional_json_body()
             tag = Tag(
                 name=data['name'],
                 color=data.get('color', '#004C8E'),
@@ -443,7 +464,7 @@ def register_routes(app):
     @app.route('/api/entries/<int:entry_id>/tags', methods=['POST'])
     def add_entry_tag(entry_id):
         try:
-            data = request.json or {}
+            data = optional_json_body()
             with get_database().session_scope() as session:
                 entry = session.get(Entry, entry_id)
                 tag = session.get(Tag, data['tag_id'])
@@ -575,7 +596,7 @@ def register_routes(app):
     @app.route('/api/entries/<int:entry_id>/links', methods=['POST'])
     def add_entry_link(entry_id):
         try:
-            data = request.json or {}
+            data = optional_json_body()
             with get_database().session_scope() as session:
                 target_entry = session.get(Entry, data['target_entry_id'])
                 if not target_entry:
@@ -618,7 +639,7 @@ def register_routes(app):
     @app.route('/api/entries/bulk-import', methods=['POST'])
     def bulk_import_entries():
         try:
-            data = request.json or {}
+            data = optional_json_body()
             entries = data.get('entries', [])
             if not entries:
                 return jsonify({'error': 'No entries provided'}), 400
@@ -773,7 +794,7 @@ def register_routes(app):
     @app.route('/api/entries/<int:entry_id>/definitions', methods=['POST'])
     def add_entry_definition(entry_id):
         try:
-            data = request.json or {}
+            data = optional_json_body()
             now = utcnow_iso()
 
             with get_database().session_scope() as session:
@@ -853,7 +874,7 @@ def register_routes(app):
                methods=['PUT'])
     def update_entry_definition(entry_id, def_id):
         try:
-            data = request.json or {}
+            data = optional_json_body()
             with get_database().session_scope() as session:
                 definition = session.get(EntryDefinition, def_id)
                 if not definition or definition.entry_id != entry_id:
@@ -996,7 +1017,7 @@ def register_routes(app):
     @app.route('/api/restore', methods=['POST'])
     def restore_database():
         try:
-            data = request.json
+            data = optional_json_body()
             if not data or 'entries' not in data:
                 return jsonify({'error': 'Invalid backup format'}), 400
 
@@ -1004,13 +1025,13 @@ def register_routes(app):
                 session.query(EntryDefinition).delete(
                     synchronize_session=False
                 )
-                session.query(EntryTag).delete(synchronize_session=False)
-                session.query(EntryLink).delete(synchronize_session=False)
+                session.query(EntryTag).delete(synchronialize_session=False)
+                session.query(EntryLink).delete(synchronialize_session=False)
                 session.query(ChangeHistory).delete(
                     synchronize_session=False
                 )
-                session.query(Entry).delete(synchronize_session=False)
-                session.query(Tag).delete(synchronize_session=False)
+                session.query(Entry).delete(synchronialize_session=False)
+                session.query(Tag).delete(synchronialize_session=False)
                 session.flush()
 
                 entry_id_map = {}
@@ -1146,7 +1167,7 @@ def register_routes(app):
     @app.route('/admin/', methods=['GET'])
     @app.route('/admin/<path:subpath>', methods=['GET'])
     def admin_shell(subpath=''):
-        # Only serve the shell for the bare /admin path or non-file paths.
+        # Only serve the admin shell for the bare /admin path or non-file paths.
         # Requests for real admin assets (admin-api.js, admin.js) are
         # served by the static handler.
         if subpath and '.' in subpath.split('/')[-1]:
