@@ -24,7 +24,7 @@ jobs:
         run: pip install -r api/requirements.txt
 
       - name: Run test suite
-        run: python -m unittest integration_tests.test_entries integration_tests.test_tags integration_tests.test_links integration_tests.test_definitions integration_tests.test_bulk_import integration_tests.test_static integration_tests.test_backup_restore integration_tests.test_auth integration_tests.test_api_integration -v
+        run: python -m unittest integration_tests.test_entries integration_tests.test_tags integration_tests.test_links integration_tests.test_definitions integration_tests.test_bulk_import integration_tests.test_static integration_tests.test_backup_restore integration_tests.test_auth integration_tests.test_api_integration integration_tests.test_import_isolation integration_tests.test_request_body -v
 
   mssql:
     runs-on: ubuntu-latest
@@ -57,7 +57,7 @@ jobs:
       - name: Run MSSQL integration tests
         env:
           RUN_MSSQL_TESTS: 'true'
-          MSSQL_TEST_URL: mssql+pymssql://sa:DataDictionary!234@127.0.0.1:14333/data_dictionary_test
+          MSSQL_TEST_URL: ******127.0.0.1:14333/data_dictionary_test
         run: python -m unittest integration_tests.test_api_integration -v
 
   postgres:
@@ -95,5 +95,5 @@ jobs:
       - name: Run PostgreSQL integration tests
         env:
           RUN_POSTGRES_TESTS: 'true'
-          POSTGRES_TEST_URL: postgresql+psycopg2://postgres:postgres@127.0.0.1:54320/data_dictionary_test
+          POSTGRES_TEST_URL: ******127.0.0.1:54320/data_dictionary_test
         run: python -m unittest integration_tests.test_api_integration -v
