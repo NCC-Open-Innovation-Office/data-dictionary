@@ -1025,13 +1025,13 @@ def register_routes(app):
                 session.query(EntryDefinition).delete(
                     synchronize_session=False
                 )
-                session.query(EntryTag).delete(synchronialize_session=False)
-                session.query(EntryLink).delete(synchronialize_session=False)
+                session.query(EntryTag).delete(synchronize_session=False)
+                session.query(EntryLink).delete(synchronize_session=False)
                 session.query(ChangeHistory).delete(
                     synchronize_session=False
                 )
-                session.query(Entry).delete(synchronialize_session=False)
-                session.query(Tag).delete(synchronialize_session=False)
+                session.query(Entry).delete(synchronize_session=False)
+                session.query(Tag).delete(synchronize_session=False)
                 session.flush()
 
                 entry_id_map = {}
