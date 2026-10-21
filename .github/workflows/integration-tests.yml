@@ -57,7 +57,7 @@ jobs:
       - name: Run MSSQL integration tests
         env:
           RUN_MSSQL_TESTS: 'true'
-          MSSQL_TEST_URL: mssql+pymssql://sa:<password>@127.0.0.1:14333/data_dictionary_test
+          MSSQL_TEST_URL: mssql+pymssql://sa:DataDictionary!234@127.0.0.1:14333/data_dictionary_test
         run: python -m unittest integration_tests.test_api_integration -v
 
   postgres:
@@ -95,5 +95,5 @@ jobs:
       - name: Run PostgreSQL integration tests
         env:
           RUN_POSTGRES_TESTS: 'true'
-          POSTGRES_TEST_URL: postgresql+psycopg2://postgres:<password>@127.0.0.1:54320/data_dictionary_test
+          POSTGRES_TEST_URL: postgresql+psycopg2://postgres:postgres@127.0.0.1:54320/data_dictionary_test
         run: python -m unittest integration_tests.test_api_integration -v
