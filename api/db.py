@@ -15,6 +15,26 @@ except ImportError:
     from models import Base
 
 
+def project_root():
+    """Absolute path to the project root (the parent of the api package).
+
+    The api package may be imported either as `api.db` or as a top-level
+    `db` (when the process runs with the api directory as its working
+    directory), but `__file__` points at the same file either way.
+    """
+    return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+
+def default_database_path():
+    """Absolute path of the default SQLite database.
+
+    Resolved against the project root rather than the current working
+    directory so that the same file is used no matter where the process
+    is started from. The canonical database lives in `data/`.
+    """
+    return os.path.join(project_root(), 'data', 'dictionary.db')
+
+
 def resolve_database_url(database_url=None):
     if database_url:
         return database_url
@@ -23,7 +43,7 @@ def resolve_database_url(database_url=None):
     if env_database_url:
         return env_database_url
 
-    database = os.environ.get('DATABASE', 'dictionary.db')
+    database = os.environ.get('DATABASE') or default_database_path()
     if '://' in database:
         return database
 
