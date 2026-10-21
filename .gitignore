@@ -1,13 +1,24 @@
-/.vscode
+.vscode/settings.json
 .DS_Store
-venv/
 
-# Python bytecode and cache
+# Python build artifacts
 __pycache__/
+*.py[cod]
 *.pyc
+*.egg-info/
 
-# Runtime logs
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Local development logs
 *.log
 
-# Local SQLite database (runtime data, not source)
-dictionary.db
+# Type checker cache
+.mypy_cache/
+
+# Local SQLite database (runtime data, not source).
+# The canonical database at data/dictionary.db is tracked intentionally;
+# this rule only applies to stray copies at the repository root.
+/dictionary.db
