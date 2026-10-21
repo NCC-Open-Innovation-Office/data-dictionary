@@ -24,8 +24,9 @@ RUN mkdir -p /app/data
 ENV DATABASE=/app/data/dictionary.db
 ENV PORT=8000
 ENV AUTH_DISABLED=true
+ENV PYTHONUNBUFFERED=1
 
 EXPOSE 8000
 
 # gunicorn serves both the API and static files via the Flask app.
-CMD ["sh", "-c", "gunicorn --bind 0.0.0.0:${PORT:-8000} --workers 1 wsgi:app --chdir /app/api"]
+CMD ["sh", "-c", "gunicorn --bind 0.0.0.0:${PORT:-8000} --access-logfile - --error-logfile - --capture-output --workers 1 wsgi:app --chdir /app/api"]
