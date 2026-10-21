@@ -18,7 +18,7 @@ A modern web-based data dictionary platform for managing organizational terms, d
 
 1. **Download the production compose file:**
    ```bash
-   curl -o docker-compose.prod.yml https://raw.githubusercontent.com/marshalmiller/data-dictionary/main/docker-compose.prod.yml
+   curl -o docker-compose.prod.yml https://raw.githubusercontent.com/NCC-Open-Innovation-Office/data-dictionary/main/docker-compose.prod.yml
    ```
 
 2. **Create data directory:**
@@ -40,7 +40,7 @@ A modern web-based data dictionary platform for managing organizational terms, d
 
 1. **Clone the repository:**
    ```bash
-   git clone https://github.com/marshalmiller/data-dictionary.git
+   git clone https://github.com/NCC-Open-Innovation-Office/data-dictionary.git
    cd data-dictionary
    ```
 
@@ -54,13 +54,31 @@ A modern web-based data dictionary platform for managing organizational terms, d
    ./start.sh
    ```
 
-## 🔐 Default Credentials
+## 🔐 Authentication
 
-**Admin Login:**
-- Username: `admin`
-- Password: `admin123`
+This app has **no password login**. Authentication is delegated to a
+reverse proxy / SSO front end (Cloudflare Access, oauth2-proxy, nginx
+`auth_request`, your own OIDC, etc.) that authenticates the user and
+passes the result down in a trusted header.
 
-> ⚠️ **Security Note**: Change these credentials in production!
+Access is resolved into three roles:
+
+- **public** — unauthenticated; read-only access to the public API.
+- **viewer** — authenticated via the trusted header; read-only, including the full backup export.
+- **admin** — authenticated *and* listed in `ADMIN_EMAILS`; full read/write.
+
+Configure it in production:
+
+```bash
+AUTH_DISABLED=false
+ADMIN_EMAILS=alice@ncc.edu,bob@ncc.edu
+AUTH_TRUSTED_EMAIL_HEADER=Cf-Access-Authenticated-User-Email
+```
+
+> ⚠️ **Security Note**: `AUTH_DISABLED` defaults to `true`, which leaves
+> every write endpoint open. Set it to `false` before exposing the app.
+> The proxy must strip and re-set the trusted header so clients cannot
+> forge it.
 
 ## 📚 Usage
 
@@ -110,7 +128,7 @@ injection in production.
 
 - `PORT`: app port (default: 8000)
 - `DATABASE`: SQLite file path shorthand (default: /app/data/dictionary.db)
-- `DATABASE_URL`: Full SQLAlchemy connection URL. Examples: `mssql+pymssql://username:password@sqlserver:1433/data_dictionary`, `postgresql+psycopg2://username:password@postgres:5432/data_dictionary`
+- `DATABASE_URL`: Full SQLAlchemy connection URL. Examples: `mssql+pymssql://<username>:<password>@sqlserver:1433/data_dictionary`, `postgresql+psycopg2://<username>:<password>@postgres:5432/data_dictionary`
 - `AUTH_DISABLED`: bypass auth (default: `true`; set `false` behind a proxy)
 - `ADMIN_EMAILS`: comma-separated admin email allow-list
 - `AUTH_TRUSTED_EMAIL_HEADER`: header carrying the authenticated email (default: `Cf-Access-Authenticated-User-Email`)
@@ -123,7 +141,7 @@ injection in production.
 
 The image is automatically built and published to GitHub Container Registry:
 
-- `ghcr.io/marshalmiller/data-dictionary:latest`
+- `ghcr.io/ncc-open-innovation-office/data-dictionary:latest`
 
 ### Available Tags
 - `latest` - Latest stable release
@@ -141,7 +159,7 @@ The image is automatically built and published to GitHub Container Registry:
 
 1. **Clone and enter directory:**
    ```bash
-   git clone https://github.com/marshalmiller/data-dictionary.git
+   git clone https://github.com/NCC-Open-Innovation-Office/data-dictionary.git
    cd data-dictionary
    ```
 
@@ -207,7 +225,7 @@ docker compose logs -f data-dictionary
 
 ### Health Checks
 - App health endpoint: `http://localhost:8000/api/health`
-- Docker health check: Built into the container
+- Container health check: declared in `docker-compose.yml` (not baked into the image)
 
 ### Troubleshooting
 
@@ -221,13 +239,13 @@ docker compose logs -f data-dictionary
 Set `DATABASE_URL` on the API service or in your shell to point at SQL Server:
 
 ```bash
-export DATABASE_URL="mssql+pymssql://username:password@sqlserver:1433/data_dictionary"
+export DATABASE_URL="mssql+pymssql://<username>:<password>@sqlserver:1433/data_dictionary"
 ```
 
 If `DATABASE_URL` is unset, the API continues to use the existing SQLite file defined by `DATABASE`.
 
-**Frontend Issues:**
-1. Check nginx logs: `docker compose logs frontend`
+**Front-end Issues:**
+1. Check app logs: `docker compose logs data-dictionary`
 2. Verify files are served: `curl http://localhost:8000`
 
 ## 📄 License
