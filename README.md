@@ -18,7 +18,7 @@ A modern web-based data dictionary platform for managing organizational terms, d
 
 1. **Download the production compose file:**
    ```bash
-   curl -o docker-compose.prod.yml https://raw.githubusercontent.com/marshalmiller/data-dictionary/main/docker-compose.prod.yml
+   curl -o docker-compose.prod.yml https://raw.githubusercontent.com/NCC-Open-Innovation-Office/data-dictionary/main/docker-compose.prod.yml
    ```
 
 2. **Create data directory:**
@@ -40,7 +40,7 @@ A modern web-based data dictionary platform for managing organizational terms, d
 
 1. **Clone the repository:**
    ```bash
-   git clone https://github.com/marshalmiller/data-dictionary.git
+   git clone https://github.com/NCC-Open-Innovation-Office/data-dictionary.git
    cd data-dictionary
    ```
 
@@ -141,7 +141,7 @@ injection in production.
 
 The image is automatically built and published to GitHub Container Registry:
 
-- `ghcr.io/marshalmiller/data-dictionary:latest`
+- `ghcr.io/ncc-open-innovation-office/data-dictionary:latest`
 
 ### Available Tags
 - `latest` - Latest stable release
@@ -159,7 +159,7 @@ The image is automatically built and published to GitHub Container Registry:
 
 1. **Clone and enter directory:**
    ```bash
-   git clone https://github.com/marshalmiller/data-dictionary.git
+   git clone https://github.com/NCC-Open-Innovation-Office/data-dictionary.git
    cd data-dictionary
    ```
 

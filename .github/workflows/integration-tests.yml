@@ -1,0 +1,99 @@
+name: Integration Tests
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+  workflow_dispatch:
+
+jobs:
+  sqlite:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install API dependencies
+        run: pip install -r api/requirements.txt
+
+      - name: Run test suite
+        run: python -m unittest integration_tests.test_entries integration_tests.test_tags integration_tests.test_links integration_tests.test_definitions integration_tests.test_bulk_import integration_tests.test_static integration_tests.test_backup_restore integration_tests.test_auth integration_tests.test_api_integration integration_tests.test_import_isolation integration_tests.test_request_body -v
+
+  mssql:
+    runs-on: ubuntu-latest
+
+    services:
+      sqlserver:
+        image: mcr.microsoft.com/mssql/server:2022-latest
+        env:
+          ACCEPT_EULA: Y
+          MSSQL_PID: Developer
+          MSSQL_SA_PASSWORD: DataDictionary!234
+        ports:
+          - 14333:1433
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install API dependencies
+        run: pip install -r api/requirements.txt
+
+      - name: Verify SQL Server connectivity
+        run: python integration_tests/wait_for_mssql.py
+
+      - name: Run MSSQL integration tests
+        env:
+          RUN_MSSQL_TESTS: 'true'
+          MSSQL_TEST_URL: mssql+pymssql://sa:DataDictionary!234@127.0.0.1:14333/data_dictionary_test
+        run: python -m unittest integration_tests.test_api_integration -v
+
+  postgres:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 54320:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install API dependencies
+        run: pip install -r api/requirements.txt
+
+      - name: Verify PostgreSQL connectivity
+        run: python integration_tests/wait_for_postgres.py
+
+      - name: Run PostgreSQL integration tests
+        env:
+          RUN_POSTGRES_TESTS: 'true'
+          POSTGRES_TEST_URL: postgresql+psycopg2://postgres:postgres@127.0.0.1:54320/data_dictionary_test
+        run: python -m unittest integration_tests.test_api_integration -v

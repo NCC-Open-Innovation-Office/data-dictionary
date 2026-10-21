@@ -1,7 +1,7 @@
 # Production Docker Compose - single container
 services:
   data-dictionary:
-    image: ghcr.io/marshalmiller/data-dictionary:latest
+    image: ghcr.io/ncc-open-innovation-office/data-dictionary:latest
     container_name: data-dictionary
     ports:
       - "8000:8000"

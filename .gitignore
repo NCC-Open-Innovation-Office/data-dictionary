@@ -1,8 +1,10 @@
 .vscode/settings.json
+.DS_Store
 
 # Python build artifacts
 __pycache__/
 *.py[cod]
+*.pyc
 *.egg-info/
 
 # Virtual environments
@@ -15,4 +17,9 @@ env/
 
 # Type checker cache
 .mypy_cache/
+
+# Local SQLite database (runtime data, not source).
+# The canonical database at data/dictionary.db is tracked intentionally;
+# this rule only applies to stray copies at the repository root.
+/dictionary.db
 
