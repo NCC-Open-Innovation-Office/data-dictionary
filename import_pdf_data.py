@@ -17,7 +17,13 @@ import os
 from api.db import Database
 from api.models import Entry
 
-os.environ.setdefault('DATABASE', 'data/dictionary.db')
+# Absolute path so the target database does not depend on the working
+# directory the script happens to be launched from.
+project_root = os.path.dirname(os.path.abspath(__file__))
+os.environ.setdefault(
+    'DATABASE',
+    os.path.join(project_root, 'data', 'dictionary.db'),
+)
 database = Database()
 
 

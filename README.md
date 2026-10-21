@@ -54,13 +54,31 @@ A modern web-based data dictionary platform for managing organizational terms, d
    ./start.sh
    ```
 
-## 🔐 Default Credentials
+## 🔐 Authentication
 
-**Admin Login:**
-- Username: `admin`
-- Password: `admin123`
+This app has **no password login**. Authentication is delegated to a
+reverse proxy / SSO front end (Cloudflare Access, oauth2-proxy, nginx
+`auth_request`, your own OIDC, etc.) that authenticates the user and
+passes the result down in a trusted header.
 
-> ⚠️ **Security Note**: Change these credentials in production!
+Access is resolved into three roles:
+
+- **public** — unauthenticated; read-only access to the public API.
+- **viewer** — authenticated via the trusted header; read-only, including the full backup export.
+- **admin** — authenticated *and* listed in `ADMIN_EMAILS`; full read/write.
+
+Configure it in production:
+
+```bash
+AUTH_DISABLED=false
+ADMIN_EMAILS=alice@ncc.edu,bob@ncc.edu
+AUTH_TRUSTED_EMAIL_HEADER=Cf-Access-Authenticated-User-Email
+```
+
+> ⚠️ **Security Note**: `AUTH_DISABLED` defaults to `true`, which leaves
+> every write endpoint open. Set it to `false` before exposing the app.
+> The proxy must strip and re-set the trusted header so clients cannot
+> forge it.
 
 ## 📚 Usage
 
@@ -207,7 +225,7 @@ docker compose logs -f data-dictionary
 
 ### Health Checks
 - App health endpoint: `http://localhost:8000/api/health`
-- Docker health check: Built into the container
+- Container health check: declared in `docker-compose.yml` (not baked into the image)
 
 ### Troubleshooting
 
@@ -226,8 +244,8 @@ export DATABASE_URL="mssql+pymssql://username:password@sqlserver:1433/data_dicti
 
 If `DATABASE_URL` is unset, the API continues to use the existing SQLite file defined by `DATABASE`.
 
-**Frontend Issues:**
-1. Check nginx logs: `docker compose logs frontend`
+**Front-end Issues:**
+1. Check app logs: `docker compose logs data-dictionary`
 2. Verify files are served: `curl http://localhost:8000`
 
 ## 📄 License

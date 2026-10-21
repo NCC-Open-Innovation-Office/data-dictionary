@@ -1,4 +1,5 @@
 import os
+import tempfile
 import unittest
 import uuid
 
@@ -27,12 +28,26 @@ class AuthIntegrationTest(unittest.TestCase):
             )
         }
 
+        # Every app built by this test class must be backed by a throwaway
+        # database. Without an explicit database_url, create_app() falls back
+        # to the DATABASE env var (default 'dictionary.db') and would write
+        # straight into the repository's real database file.
+        self.sqlite_file = tempfile.NamedTemporaryFile(
+            suffix='.db',
+            prefix='dd-auth-test-',
+            delete=False,
+        )
+        self.sqlite_file.close()
+
     def tearDown(self):
         for key, value in self._saved_env.items():
             if value is None:
                 os.environ.pop(key, None)
             else:
                 os.environ[key] = value
+
+        if os.path.exists(self.sqlite_file.name):
+            os.unlink(self.sqlite_file.name)
 
     def _make_app(self):
         import api.auth as auth
@@ -41,7 +56,11 @@ class AuthIntegrationTest(unittest.TestCase):
         import importlib
 
         importlib.reload(auth)
-        app = create_app(initialize=True, testing=True)
+        app = create_app(
+            database_url=f'sqlite:///{self.sqlite_file.name}',
+            initialize=True,
+            testing=True,
+        )
         app.config['TESTING'] = True
         return app
 

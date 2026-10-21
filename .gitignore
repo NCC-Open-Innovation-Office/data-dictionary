@@ -1,0 +1,18 @@
+.vscode/settings.json
+
+# Python build artifacts
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Local development logs
+*.log
+
+# Type checker cache
+.mypy_cache/
+
