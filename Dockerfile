@@ -14,7 +14,7 @@ RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
 COPY api/__init__.py api/app.py api/auth.py api/db.py api/models.py api/wsgi.py ./api/
 
 # Copy the front-end static files into /app so Flask serves them at /.
-COPY index.html styles.css public-api.js public.js logo-header.png ./
+COPY index.html styles.css public-api.js logo-header.png ./
 COPY admin/ ./admin/
 
 # Create directory for SQLite database persistence.
