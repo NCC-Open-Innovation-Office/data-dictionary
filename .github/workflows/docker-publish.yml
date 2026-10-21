@@ -117,7 +117,7 @@ jobs:
           ## Data Persistence
 
           The SQLite database is stored in the `./data` directory and
-          persists across container restarts.
+          persists between container restarts.
 
           ## Access Control
 
