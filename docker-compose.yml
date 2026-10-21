@@ -16,9 +16,9 @@ services:
       - PORT=8000
       - DATABASE=/app/data/dictionary.db
       # Set DATABASE_URL to use a SQLAlchemy connection URL instead of SQLite.
-      # Example: mssql+pymssql://username:password@sqlserver:1433/data_dictionary
-      # Example: postgresql+psycopg2://username:password@postgres:5432/data_dictionary
-      # - DATABASE_URL=mssql+pymssql://username:password@sqlserver:1433/data_dictionary
+      # Example: mssql+pymssql://<username>:<password>@sqlserver:1433/data_dictionary
+      # Example: postgresql+psycopg2://<username>:<password>@postgres:5432/data_dictionary
+      # - DATABASE_URL=mssql+pymssql://<username>:<password>@sqlserver:1433/data_dictionary
       # Auth (set AUTH_DISABLED=false behind an authenticating proxy)
       - AUTH_DISABLED=true
       # - ADMIN_EMAILS=alice@ncc.edu,bob@ncc.edu
