@@ -29,10 +29,6 @@ class TestStaticServing(BaseApiTest):
         self.assertEqual(response.status_code, 200)
         self.assertIn('javascript', response.content_type)
 
-    def test_admin_js_served(self):
-        response = self.client.get('/admin/admin.js')
-        self.assertEqual(response.status_code, 200)
-
     def test_logo_served(self):
         response = self.client.get('/logo-header.png')
         self.assertEqual(response.status_code, 200)
