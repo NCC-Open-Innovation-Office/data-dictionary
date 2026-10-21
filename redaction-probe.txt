@@ -1,6 +1,0 @@
-variant_a mssql+pymssql://username:password@sqlserver:1433/db
-variant_b mssql+pymssql://<username>:<password>@sqlserver:1433/db
-variant_c mssql+pymssql://USER:PASSWORD@sqlserver:1433/db
-variant_d mssql+pymssql://user:pass@sqlserver:1433/db
-variant_e mssql+pymssql://{user}:{password}@sqlserver:1433/db
-variant_f mssql+pymssql://user:********@sqlserver:1433/db
