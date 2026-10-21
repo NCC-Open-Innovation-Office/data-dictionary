@@ -1167,7 +1167,7 @@ def register_routes(app):
     @app.route('/admin/', methods=['GET'])
     @app.route('/admin/<path:subpath>', methods=['GET'])
     def admin_shell(subpath=''):
-        # Only serve the shell for the bare /admin path or non-file paths.
+        # Only serve the admin shell for the bare /admin path or non-file paths.
         # Requests for real admin assets (admin-api.js, admin.js) are
         # served by the static handler.
         if subpath and '.' in subpath.split('/')[-1]:

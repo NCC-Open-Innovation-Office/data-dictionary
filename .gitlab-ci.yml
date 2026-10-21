@@ -1,6 +1,6 @@
 # You can override the included template(s) by including variable overrides
-# SAST customization: https://docs.gitlab.com/user/application_security/sast/#available-cicd-variables
-# Secret Detection customization: https://docs.gitlab.com/user/application_security/secret_detection/pipeline/configure/
+# SAST customization: https://docs.gitlab.com/user/application_security/sast/#available-ci-cd-variables
+# Secret Detection customization: https://docs.gitlab.com/ci/variables/#predefined-variables
 # Dependency Scanning customization: https://docs.gitlab.com/user/application_security/dependency_scanning/#customizing-analyzer-behavior
 # Container Scanning customization: https://docs.gitlab.com/user/application_security/container_scanning/#customizing-analyzer-behavior
 # Note that environment variables can be set in several places

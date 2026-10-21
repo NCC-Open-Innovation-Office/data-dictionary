@@ -128,7 +128,7 @@ injection in production.
 
 - `PORT`: app port (default: 8000)
 - `DATABASE`: SQLite file path shorthand (default: /app/data/dictionary.db)
-- `DATABASE_URL`: Full SQLAlchemy connection URL. Examples: `mssql+pymssql://username:password@sqlserver:1433/data_dictionary`, `postgresql+psycopg2://username:password@postgres:5432/data_dictionary`
+- `DATABASE_URL`: Full SQLAlchemy connection URL. Examples: `mssql+pymssql://<username>:<password>@sqlserver:1433/data_dictionary`, `postgresql+psycopg2://<username>:<password>@postgres:5432/data_dictionary`
 - `AUTH_DISABLED`: bypass auth (default: `true`; set `false` behind a proxy)
 - `ADMIN_EMAILS`: comma-separated admin email allow-list
 - `AUTH_TRUSTED_EMAIL_HEADER`: header carrying the authenticated email (default: `Cf-Access-Authenticated-User-Email`)
@@ -239,7 +239,7 @@ docker compose logs -f data-dictionary
 Set `DATABASE_URL` on the API service or in your shell to point at SQL Server:
 
 ```bash
-export DATABASE_URL="mssql+pymssql://username:password@sqlserver:1433/data_dictionary"
+export DATABASE_URL="mssql+pymssql://<username>:<password>@sqlserver:1433/data_dictionary"
 ```
 
 If `DATABASE_URL` is unset, the API continues to use the existing SQLite file defined by `DATABASE`.

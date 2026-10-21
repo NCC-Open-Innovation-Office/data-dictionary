@@ -22,4 +22,3 @@ env/
 # The canonical database at data/dictionary.db is tracked intentionally;
 # this rule only applies to stray copies at the repository root.
 /dictionary.db
-
