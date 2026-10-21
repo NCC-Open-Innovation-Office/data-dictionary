@@ -107,7 +107,32 @@ By default the SQLite database is stored in `./data/dictionary.db` and
 persists across container restarts. To use MSSQL or PostgreSQL instead,
 set `DATABASE_URL` (see `DOCKER.md`).
 
+### SELinux hosts
+
+The compose files mount the data directory with the `:z` option:
+
+```yaml
+volumes:
+  - ./data:/app/data:z
+```
+
+On a host with SELinux enabled (RHEL, CentOS, Fedora), a container
+cannot read a host directory that carries a normal home-directory
+label. Without `:z` the app fails at startup with:
+
+```
+sqlite3.OperationalError: unable to open database file
+```
+
+The `:z` option relabels `./data` so the container can access it. It is
+ignored on hosts without SELinux, so the same compose file works on
+both. Note that `:z` changes the SELinux label on the host directory.
+
 ## Troubleshooting
+
+### App exits immediately with "unable to open database file"
+- On a SELinux host, the data directory needs the `:z` mount option.
+  See "SELinux hosts" above.
 
 ### Admin shows read-only for everyone
 - `AUTH_DISABLED` is still `true` (the default). Set it to `false` and
