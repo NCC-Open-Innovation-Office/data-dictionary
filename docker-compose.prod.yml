@@ -1,27 +1,37 @@
 # Production Docker Compose - single container
 services:
-  data-dictionary:
-    image: ghcr.io/ncc-open-innovation-office/data-dictionary:latest
-    container_name: data-dictionary
+  data_dictionary:
+    image: ${NEXUS}:8082/data_dictionary:${VERSION}
     ports:
-      - "8000:8000"
-    volumes:
-      # Persist database on host.
-      # The ':z' option relabels the host directory for SELinux so the
-      # container can read it. It is ignored on hosts without SELinux.
-      - ./data:/app/data:z
+      - "8001:8000"
+    deploy:
+      mode: global
+      update_config:
+        parallelism: 1
+        delay: 20s
+        order: start-first
     environment:
-      - PORT=8000
-      - DATABASE=/app/data/dictionary.db
+      # - PORT=443
+      - ADMIN_EMAILS=${ADMIN_EMAILS}
+      - AUTH_TRUSTED_EMAIL_HEADER=SSOUSER
+      - DATABASE_URL=${DATABASE_URL}  # set in the environment, e.g.
+      #   mssql+pymssql://<username>:<password>@<host>:1433/<database>
+      #- DATABASE=/app/data/dictionary.db
       # Set DATABASE_URL to use a SQLAlchemy connection URL instead of SQLite.
       # - DATABASE_URL=mssql+pymssql://<username>:<password>@sqlserver:1433/data_dictionary
       # Auth (set AUTH_DISABLED=false behind an authenticating proxy)
       - AUTH_DISABLED=false
       # - ADMIN_EMAILS=alice@ncc.edu,bob@ncc.edu
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
+    secrets:
+      - source: data_dictionary
+        target: config
+#    healthcheck:
+#      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
+#      interval: 30s
+#      timeout: 10s
+#      retries: 3
+#      start_period: 40s
+
+secrets:
+  data_dictionary:
+    external: true
