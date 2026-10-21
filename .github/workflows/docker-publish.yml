@@ -40,6 +40,7 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
             type=ref,event=branch
             type=ref,event=pr
             type=semver,pattern={{version}}
@@ -71,7 +72,9 @@ jobs:
               ports:
                 - "8000:8000"
               volumes:
-                - ./data:/app/data
+                # ':z' relabels the host directory for SELinux so the
+                # container can read it. Ignored on hosts without SELinux.
+                - ./data:/app/data:z
               environment:
                 - PORT=8000
                 - DATABASE=/app/data/dictionary.db
@@ -114,7 +117,7 @@ jobs:
           ## Data Persistence
 
           The SQLite database is stored in the `./data` directory and
-          persists between container restarts.
+          persists across container restarts.
 
           ## Access Control
 
