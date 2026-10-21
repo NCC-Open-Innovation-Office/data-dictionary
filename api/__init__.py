@@ -30,12 +30,6 @@ def __getattr__(name):
         globals()['create_app'] = create_app
         return create_app
 
-    if name == 'app':
-        from api.wsgi import app
-
-        globals()['app'] = app
-        return app
-
     if name == 'application':
         from api.wsgi import app
 
