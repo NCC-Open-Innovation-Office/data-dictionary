@@ -51,109 +51,157 @@ def parse_table_data(tables):
     """Parse the tables and map columns to database fields"""
     entries = []
     
-    for table in tables:
-        if not table or len(table) < 2:
+    # Expected column names (case-insensitive matching)
+    column_mapping = {
+        'plain english entry': 'term',
+        'definition': 'definition',
+        'criteria': 'variations',
+        'usage notes': 'discussion',
+        'potential values': 'inputFormat',
+        'and potential values': 'inputFormat',  # Handle variation
+    }
+    
+    for table_idx, table in enumerate(tables):
+        if not table or len(table) < 2:  # Need at least header + 1 row
             continue
-            
-        headers = [str(h).strip() if h else '' for h in table[0]]
-        header_map = {}
-        for index, header in enumerate(headers):
-            header_map[header.lower()] = index
         
-        for row in table[1:]:
-            if not row:
+        print(f"\nProcessing table {table_idx + 1}...")
+        
+        # First row is header
+        headers = [str(h).strip().lower() if h else '' for h in table[0]]
+        print(f"Headers found: {headers}")
+        
+        # Map header indices to our fields
+        field_indices = {}
+        for idx, header in enumerate(headers):
+            for key, field in column_mapping.items():
+                if key in header:
+                    field_indices[field] = idx
+                    break
+        
+        print(f"Mapped fields: {list(field_indices.keys())}")
+        
+        # Process data rows
+        for row_idx, row in enumerate(table[1:], 1):
+            # Skip empty rows
+            if not any(cell for cell in row if cell):
                 continue
             
-            def get_value(*names):
-                for name in names:
-                    if name in header_map:
-                        index = header_map[name]
-                        if index < len(row) and row[index]:
-                            return str(row[index]).strip()
-                return ''
+            entry = {}
+            for field, col_idx in field_indices.items():
+                value = row[col_idx] if col_idx < len(row) else ''
+                entry[field] = str(value).strip() if value else ''
             
-            entry = {
-                'term': get_value('plain english entry', 'term', 'entry'),
-                'definition': get_value('definition', 'criteria', 'description'),
-                'abbreviation': get_value('abbreviation', 'abbrev', 'abbr'),
-                'dataType': get_value('data type', 'datatype', 'type'),
-                'inputFormat': get_value(
-                    'potential values', 'input format', 'values'
-                ),
-                'variations': get_value('variations', 'variation'),
-            }
-            
-            if entry['term']:
+            # Must have at least a term
+            if entry.get('term'):
                 entries.append(entry)
+                print(f"  Row {row_idx}: Added term '{entry['term'][:50]}...'")
+            else:
+                print(f"  Row {row_idx}: Skipped (no term)")
     
     return entries
 
-def create_entries(entries):
-    """Create entries in the database"""
-    created = 0
-    skipped = 0
+def import_to_database(entries):
+    """Import parsed entries into the configured database"""
+    if not entries:
+        print("No entries to import!")
+        return
     
+    print(f"\n{'='*60}")
+    print(f"Importing {len(entries)} entries into database...")
+    print(f"{'='*60}\n")
+    
+    imported = 0
+    skipped = 0
+
     with database.session_scope() as session:
-        for item in entries:
-            existing = session.query(Entry).filter(
-                Entry.term == item['term']
-            ).first()
-            
-            if existing:
+        for entry in entries:
+            term = entry.get('term', '')
+
+            if not term:
                 skipped += 1
                 continue
-            
-            entry = Entry(
-                term=item['term'],
-                definition=item['definition'],
-                abbreviation=item['abbreviation'],
-                dataType=item['dataType'],
-                inputFormat=item['inputFormat'],
-                variations=item['variations'],
-                classification='public',
-                createdAt=utcnow_iso(),
-                updatedAt=utcnow_iso(),
+
+            existing = session.query(Entry).filter(Entry.term == term).one_or_none()
+            if existing:
+                print(f"⚠️  Skipping '{term}' - already exists")
+                skipped += 1
+                continue
+
+            now = utcnow_iso()
+            session.add(
+                Entry(
+                    term=entry.get('term', ''),
+                    definition=entry.get('definition', ''),
+                    variations=entry.get('variations', ''),
+                    discussion=entry.get('discussion', ''),
+                    inputFormat=entry.get('inputFormat', ''),
+                    abbreviation='',
+                    dataType='',
+                    owner='',
+                    stewards='',
+                    classification='public',
+                    createdAt=now,
+                    updatedAt=now,
+                )
             )
-            session.add(entry)
-            created += 1
+
+            print(f"✓ Imported: {term}")
+            imported += 1
     
-    print(f"\nCreated {created} entries, skipped {skipped} duplicates")
-    return created
+    print(f"\n{'='*60}")
+    print(f"Import complete!")
+    print(f"  Imported: {imported}")
+    print(f"  Skipped:  {skipped}")
+    print(f"{'='*60}")
 
 def main():
     if len(sys.argv) < 2:
         print("Usage: python import_pdf_data.py <path-to-pdf>")
-        print("\nExample: python import_pdf_data.py ~/Downloads/terms.pdf")
+        print("\nThis script will:")
+        print("  1. Extract tables from the PDF")
+        print("  2. Map columns: Plain English Entry -> Term, Definition -> Definition")
+        print("     Criteria -> Variations, Usage Notes -> Discussion (backend notes)")
+        print("     Potential Values -> Input Format")
+        print("  3. Import the data into the configured database")
         sys.exit(1)
     
     pdf_path = sys.argv[1]
     
     if not os.path.exists(pdf_path):
-        print(f"Error: File not found: {pdf_path}")
+        print(f"Error: PDF file not found: {pdf_path}")
         sys.exit(1)
     
     print("=" * 60)
-    print("Importing PDF Data Dictionary")
+    print("Data Dictionary PDF Import Tool")
     print("=" * 60)
-    print()
     
+    # Extract tables from PDF
     tables = extract_tables_from_pdf(pdf_path)
-    print(f"\nExtracted {len(tables)} tables")
     
+    if not tables:
+        print("No tables found in PDF!")
+        sys.exit(1)
+    
+    print(f"\nExtracted {len(tables)} table(s) from PDF")
+    
+    # Parse the data
     entries = parse_table_data(tables)
-    print(f"Parsed {len(entries)} entries")
     
     if not entries:
-        print("No entries found. Check the PDF format.")
+        print("\nNo valid entries found!")
         sys.exit(1)
     
-    print("\nFirst 3 entries:")
-    for entry in entries[:3]:
-        print(f"  - {entry['term']}")
+    print(f"\nParsed {len(entries)} entries")
     
-    create_entries(entries)
+    # Ask for confirmation
+    response = input("\nProceed with import? (y/n): ")
+    if response.lower() != 'y':
+        print("Import cancelled")
+        sys.exit(0)
     
-    print("\nDone!")
+    # Import to database
+    import_to_database(entries)
 
 if __name__ == '__main__':
     main()
