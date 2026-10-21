@@ -14,8 +14,13 @@ PORT = 8000
 
 
 def main():
-    # Use a local SQLite database under ./data for development.
-    os.environ.setdefault('DATABASE', 'data/dictionary.db')
+    # Use the SQLite database under <project root>/data for development.
+    # The path is absolute because the app is launched with the api
+    # directory as its working directory.
+    project_root = os.path.dirname(os.path.abspath(__file__))
+    database_path = os.path.join(project_root, 'data', 'dictionary.db')
+
+    os.environ.setdefault('DATABASE', database_path)
     os.environ.setdefault('AUTH_DISABLED', 'true')
 
     print("=" * 60)

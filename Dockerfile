@@ -14,7 +14,7 @@ RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
 COPY api/__init__.py api/app.py api/auth.py api/db.py api/models.py api/wsgi.py ./api/
 
 # Copy the front-end static files into /app so Flask serves them at /.
-COPY index.html styles.css public-api.js public.js logo-header.png ./
+COPY index.html styles.css public-api.js logo-header.png ./
 COPY admin/ ./admin/
 
 # Create directory for SQLite database persistence.
@@ -24,8 +24,9 @@ RUN mkdir -p /app/data
 ENV DATABASE=/app/data/dictionary.db
 ENV PORT=8000
 ENV AUTH_DISABLED=true
+ENV PYTHONUNBUFFERED=1
 
 EXPOSE 8000
 
 # gunicorn serves both the API and static files via the Flask app.
-CMD ["sh", "-c", "gunicorn --bind 0.0.0.0:${PORT:-8000} --workers 1 wsgi:app --chdir /app/api"]
+CMD ["sh", "-c", "gunicorn --bind 0.0.0.0:${PORT:-8000} --access-logfile - --error-logfile - --capture-output --workers 1 wsgi:app --chdir /app/api"]

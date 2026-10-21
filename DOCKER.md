@@ -60,8 +60,8 @@ PostgreSQL instead, set `DATABASE_URL`:
 services:
   data-dictionary:
     environment:
-      - DATABASE_URL=mssql+pymssql://user:pass@sqlserver:1433/data_dictionary
-      # or: postgresql+psycopg2://user:pass@postgres:5432/data_dictionary
+      - DATABASE_URL=mssql+pymssql://<username>:<password>@sqlserver:1433/data_dictionary
+      # or: postgresql+psycopg2://<username>:<password>@postgres:5432/data_dictionary
 ```
 
 ## Production Deployment
