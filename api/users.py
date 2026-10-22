@@ -216,6 +216,11 @@ def remove_user_from_group(session, user, group_name):
         return False
     session.delete(membership)
     session.flush()
+    # The 'groups' relationship may already be loaded, in which case it
+    # still holds the deleted membership until the session expires it.
+    # Expire it explicitly so a caller that reads the relationship right
+    # after this call sees the updated membership rather than a stale one.
+    session.expire(user, ['groups'])
     return True
 
 

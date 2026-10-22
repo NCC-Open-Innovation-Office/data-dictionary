@@ -218,6 +218,48 @@ class UserManagementTest(unittest.TestCase):
             )
             self.assertEqual(write.status_code, 403)
 
+    def test_update_response_reports_the_new_groups(self):
+        """The PUT response must reflect the change that was just made.
+
+        The 'groups' relationship can already be loaded when a
+        membership row is deleted, so a response built straight after
+        the delete reported the old membership. The database was
+        correct, but the response contradicted it.
+        """
+        app = self._make_app()
+        email = self._email()
+        with app.test_client() as client:
+            client.get('/api/auth/me', headers={'SSOUSER': email})
+            listing = client.get('/api/users', headers=self._admin_headers())
+            user_id = [
+                u for u in listing.get_json()['users']
+                if u['email'] == email
+            ][0]['id']
+
+            promoted = client.put(
+                f'/api/users/{user_id}',
+                json={'groups': ['viewers', 'admins']},
+                headers=self._admin_headers(),
+            )
+            self.assertEqual(promoted.status_code, 200)
+            self.assertIn(
+                'admins', promoted.get_json()['user']['groups'],
+                'promotion response should report the admins group',
+            )
+
+            demoted = client.put(
+                f'/api/users/{user_id}',
+                json={'groups': ['viewers']},
+                headers=self._admin_headers(),
+            )
+            self.assertEqual(demoted.status_code, 200)
+            groups = demoted.get_json()['user']['groups']
+            self.assertNotIn(
+                'admins', groups,
+                'demotion response should not still report the admins group',
+            )
+            self.assertEqual(demoted.get_json()['user']['role'], 'viewer')
+
     def test_deactivated_user_loses_access(self):
         app = self._make_app()
         email = self._email()
