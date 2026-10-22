@@ -49,6 +49,23 @@ class TestStaticServing(BaseApiTest):
         response = self.client.get('/admin')
         self.assertEqual(response.status_code, 200)
 
+    def test_admin_shell_references_its_script_by_absolute_path(self):
+        """The admin shell must load its script from either admin URL.
+
+        The shell is served at both '/admin' and '/admin/'. A relative
+        script src resolves differently for the two: from '/admin' it
+        becomes '/admin-api.js' (404), which leaves the admin table
+        empty with no error on the page. An absolute path resolves the
+        same way from both URLs.
+        """
+        for path in ('/admin', '/admin/'):
+            with self.subTest(path=path):
+                response = self.client.get(path)
+                self.assertEqual(response.status_code, 200)
+                body = response.get_data(as_text=True)
+                self.assertIn('src="/admin/admin-api.js', body)
+                self.assertNotIn('src="admin-api.js', body)
+
 
 if __name__ == '__main__':
     unittest.main()
