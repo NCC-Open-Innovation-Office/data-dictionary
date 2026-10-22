@@ -14,6 +14,7 @@ class DataDictionary {
         this.apiBase = '/api';
         this.userEmail = null;
         this.userRole = 'public'; // public | viewer | admin
+        this.users = []; // people with access, loaded on demand
         this.init();
     }
 
@@ -101,6 +102,12 @@ class DataDictionary {
                 formSection.style.display = 'none';
             }
 
+            // User management is an admin-only concern.
+            const manageUsersBtn = document.getElementById('manage-users-btn');
+            if (manageUsersBtn) {
+                manageUsersBtn.style.display = 'none';
+            }
+
             // Hide per-row edit/delete buttons will be handled in
             // renderTable() via this.userRole.
         }
@@ -127,6 +134,12 @@ class DataDictionary {
         const jsonBackupBtn = document.getElementById('json-backup-btn');
         const jsonRestoreBtn = document.getElementById('json-restore-btn');
         const jsonFileInput = document.getElementById('json-file-input');
+
+        // User management
+        const manageUsersBtn = document.getElementById('manage-users-btn');
+        const closeUsersModalBtn = document.getElementById('close-users-modal-btn');
+        const createUserBtn = document.getElementById('create-user-btn');
+        const newUserEmail = document.getElementById('new-user-email');
 
         form.addEventListener('submit', (e) => {
             e.preventDefault();
@@ -155,6 +168,25 @@ class DataDictionary {
         jsonBackupBtn.addEventListener('click', () => this.downloadJsonBackup());
         jsonRestoreBtn.addEventListener('click', () => jsonFileInput.click());
         jsonFileInput.addEventListener('change', (e) => this.handleJsonRestore(e));
+
+        // User management
+        if (manageUsersBtn) {
+            manageUsersBtn.addEventListener('click', () => this.showUserManagement());
+        }
+        if (closeUsersModalBtn) {
+            closeUsersModalBtn.addEventListener('click', () => this.hideUserManagement());
+        }
+        if (createUserBtn) {
+            createUserBtn.addEventListener('click', () => this.createUser());
+        }
+        if (newUserEmail) {
+            newUserEmail.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    this.createUser();
+                }
+            });
+        }
         
         // Add event listeners for sortable column headers
         document.querySelectorAll('.sortable').forEach(th => {
@@ -1460,6 +1492,218 @@ class DataDictionary {
             alert('Error restoring backup: ' + error.message);
             event.target.value = '';
         }
+    }
+
+    // ------------------------------------------------------------------
+    // User Management
+    // ------------------------------------------------------------------
+    async showUserManagement() {
+        const modal = document.getElementById('users-modal');
+        if (modal) {
+            modal.style.display = 'flex';
+        }
+        await this.loadUsers();
+    }
+
+    hideUserManagement() {
+        const modal = document.getElementById('users-modal');
+        if (modal) {
+            modal.style.display = 'none';
+        }
+    }
+
+    async loadUsers() {
+        const tbody = document.getElementById('users-tbody');
+        const message = document.getElementById('users-list-message');
+        if (!tbody) {
+            return;
+        }
+        tbody.innerHTML = '';
+        try {
+            const response = await fetch(`${this.apiBase}/users`);
+            if (!response.ok) {
+                throw new Error('Failed to load users');
+            }
+            const body = await response.json();
+            this.users = body.users || [];
+            if (message) {
+                message.textContent = this.users.length
+                    ? `${this.users.length} user(s) with access.`
+                    : 'No users yet. Add one above, or they will be created automatically on first sign-in.';
+            }
+            this.renderUsers();
+        } catch (error) {
+            console.error('Error loading users:', error);
+            if (message) {
+                message.textContent = 'Could not load users. Administrator access is required.';
+            }
+        }
+    }
+
+    renderUsers() {
+        const tbody = document.getElementById('users-tbody');
+        if (!tbody) {
+            return;
+        }
+        tbody.innerHTML = '';
+        this.users.forEach((user) => {
+            const row = document.createElement('tr');
+
+            const emailCell = document.createElement('td');
+            emailCell.innerHTML = `
+                <strong>${this.escapeHtml(user.email)}</strong>
+                ${user.displayName ? `<br><small>${this.escapeHtml(user.displayName)}</small>` : ''}
+                ${user.active ? '' : '<br><small style="color:#b00020;">Deactivated</small>'}
+            `;
+            row.appendChild(emailCell);
+
+            const roleCell = document.createElement('td');
+            const role = user.role || 'none';
+            const label = role === 'admin'
+                ? 'Administrator'
+                : (role === 'viewer' ? 'Viewer' : 'No access');
+            roleCell.innerHTML = `<span class="role-badge">${label}</span>`;
+            row.appendChild(roleCell);
+
+            const groupsCell = document.createElement('td');
+            const groups = (user.groups || []).join(', ') || '—';
+            groupsCell.textContent = groups;
+            row.appendChild(groupsCell);
+
+            const lastLoginCell = document.createElement('td');
+            lastLoginCell.textContent = user.lastLoginAt
+                ? this.formatTimestamp(user.lastLoginAt)
+                : 'Never';
+            row.appendChild(lastLoginCell);
+
+            const actionsCell = document.createElement('td');
+            const isViewer = (user.groups || []).includes('viewers');
+            const isAdmin = (user.groups || []).includes('admins');
+
+            const viewerToggle = document.createElement('button');
+            viewerToggle.className = 'btn btn-secondary btn-small';
+            viewerToggle.textContent = isViewer ? 'Remove Viewer' : 'Make Viewer';
+            viewerToggle.onclick = () => this.toggleUserGroup(user.id, 'viewers', !isViewer);
+
+            const adminToggle = document.createElement('button');
+            adminToggle.className = 'btn btn-secondary btn-small';
+            adminToggle.textContent = isAdmin ? 'Remove Admin' : 'Make Admin';
+            adminToggle.onclick = () => this.toggleUserGroup(user.id, 'admins', !isAdmin);
+
+            const removeBtn = document.createElement('button');
+            removeBtn.className = 'btn btn-secondary btn-small';
+            removeBtn.textContent = 'Remove';
+            removeBtn.onclick = () => this.removeUser(user);
+
+            const wrap = document.createElement('div');
+            wrap.style.display = 'flex';
+            wrap.style.gap = '6px';
+            wrap.style.flexWrap = 'wrap';
+            wrap.appendChild(viewerToggle);
+            wrap.appendChild(adminToggle);
+            wrap.appendChild(removeBtn);
+            actionsCell.appendChild(wrap);
+            row.appendChild(actionsCell);
+
+            tbody.appendChild(row);
+        });
+    }
+
+    async toggleUserGroup(userId, groupName, shouldHave) {
+        const user = this.users.find((item) => item.id === userId);
+        if (!user) {
+            return;
+        }
+        const groups = new Set(user.groups || []);
+        if (shouldHave) {
+            groups.add(groupName);
+        } else {
+            groups.delete(groupName);
+        }
+        try {
+            const response = await fetch(`${this.apiBase}/users/${userId}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ groups: Array.from(groups) })
+            });
+            if (!response.ok) {
+                const body = await response.json().catch(() => ({}));
+                throw new Error(body.error || 'Failed to update user');
+            }
+            await this.loadUsers();
+        } catch (error) {
+            console.error('Error updating user:', error);
+            alert(error.message);
+        }
+    }
+
+    async createUser() {
+        const emailInput = document.getElementById('new-user-email');
+        const viewerInput = document.getElementById('new-user-viewer');
+        const adminInput = document.getElementById('new-user-admin');
+        if (!emailInput) {
+            return;
+        }
+        const email = emailInput.value.trim().toLowerCase();
+        if (!email) {
+            alert('Enter an email address.');
+            return;
+        }
+        const groups = [];
+        if (viewerInput && viewerInput.checked) {
+            groups.push('viewers');
+        }
+        if (adminInput && adminInput.checked) {
+            groups.push('admins');
+        }
+        try {
+            const response = await fetch(`${this.apiBase}/users`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email, groups })
+            });
+            if (!response.ok) {
+                const body = await response.json().catch(() => ({}));
+                throw new Error(body.error || 'Failed to add user');
+            }
+            emailInput.value = '';
+            if (viewerInput) { viewerInput.checked = true; }
+            if (adminInput) { adminInput.checked = false; }
+            await this.loadUsers();
+        } catch (error) {
+            console.error('Error adding user:', error);
+            alert(error.message);
+        }
+    }
+
+    async removeUser(user) {
+        if (!confirm(`Remove ${user.email}? They will need to be added again to regain access.`)) {
+            return;
+        }
+        try {
+            const response = await fetch(`${this.apiBase}/users/${user.id}`, {
+                method: 'DELETE'
+            });
+            if (!response.ok) {
+                const body = await response.json().catch(() => ({}));
+                throw new Error(body.error || 'Failed to remove user');
+            }
+            await this.loadUsers();
+        } catch (error) {
+            console.error('Error removing user:', error);
+            alert(error.message);
+        }
+    }
+
+    formatTimestamp(value) {
+        if (!value) {
+            return '';
+        }
+        const parsed = new Date(value);
+        if (isNaN(parsed.getTime())) {
+            return value;
+        }
+        return parsed.toLocaleString();
     }
 }
 

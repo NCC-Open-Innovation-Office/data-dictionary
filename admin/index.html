@@ -160,6 +160,9 @@
                 <div class="search-header">
                     <h2>Dictionary Entries</h2>
                     <div class="header-buttons">
+                        <button id="manage-users-btn" class="btn btn-secondary btn-small">
+                            👥 Manage Users
+                        </button>
                         <button id="view-history-btn" class="btn btn-secondary btn-small">
                             📋 View Change History
                         </button>
@@ -282,6 +285,58 @@
                         <label>Existing Reports</label>
                         <div id="tags-list" class="tags-list">
                             <!-- Reports will be listed here -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- User Management Modal -->
+        <div id="users-modal" class="modal" style="display:none;">
+            <div class="modal-content modal-large">
+                <div class="modal-header">
+                    <h2>Manage Users</h2>
+                    <button id="close-users-modal-btn" class="btn btn-secondary">Close</button>
+                </div>
+                <div class="modal-body">
+                    <div class="form-group">
+                        <label for="new-user-email">Add User</label>
+                        <div style="display: flex; gap: 10px; flex-wrap: wrap; align-items: center;">
+                            <input type="email" id="new-user-email" placeholder="person@ncc.edu" style="flex: 1; min-width: 220px;">
+                            <label style="display: flex; align-items: center; gap: 5px; margin: 0;">
+                                <input type="checkbox" id="new-user-viewer" checked>
+                                Viewer
+                            </label>
+                            <label style="display: flex; align-items: center; gap: 5px; margin: 0;">
+                                <input type="checkbox" id="new-user-admin">
+                                Admin
+                            </label>
+                            <button class="btn btn-primary" id="create-user-btn">Add</button>
+                        </div>
+                        <small style="color: #666; font-size: 12px;">
+                            Adding a user here means the person is recognised when they
+                            sign in through SSO. Viewers can read the authenticated area;
+                            admins can also edit content.
+                        </small>
+                    </div>
+                    <div class="form-group">
+                        <label>Current Users</label>
+                        <div id="users-list-message" style="color: #666; font-size: 13px; margin-bottom: 8px;"></div>
+                        <div class="table-container">
+                            <table class="history-table">
+                                <thead>
+                                    <tr>
+                                        <th>Email</th>
+                                        <th>Role</th>
+                                        <th>Groups</th>
+                                        <th>Last Sign-In</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="users-tbody">
+                                    <!-- Users will be dynamically added here -->
+                                </tbody>
+                            </table>
                         </div>
                     </div>
                 </div>

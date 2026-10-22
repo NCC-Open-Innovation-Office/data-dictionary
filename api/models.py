@@ -12,6 +12,101 @@ from sqlalchemy.orm import relationship
 Base = declarative_base()
 
 
+# Role vocabulary shared by the auth layer and the API.
+ROLE_NONE = 'none'
+ROLE_VIEWER = 'viewer'
+ROLE_ADMIN = 'admin'
+
+# Higher rank wins when a user is granted a role from more than one
+# place (database group membership or an environment override).
+ROLE_RANK = {
+    ROLE_NONE: 0,
+    ROLE_VIEWER: 1,
+    ROLE_ADMIN: 2,
+}
+
+# The two groups the application acts on. Membership of 'viewers'
+# grants access to the authenticated area; membership of 'admins'
+# grants edit rights. A user may be in both -- 'admins' wins.
+GROUP_VIEWERS = 'viewers'
+GROUP_ADMINS = 'admins'
+KNOWN_GROUPS = (GROUP_VIEWERS, GROUP_ADMINS)
+
+# The role each group confers.
+GROUP_ROLE = {
+    GROUP_VIEWERS: ROLE_VIEWER,
+    GROUP_ADMINS: ROLE_ADMIN,
+}
+
+
+class User(Base):
+    """A person who can sign in to the application through SSO.
+
+    A record is created the first time a person signs in, unless an
+    administrator has already seeded one for that email address. The
+    role a user holds is *derived* from their group memberships
+    (see :class:`UserGroup`) rather than stored here, so there is a
+    single source of truth for permissions.
+    """
+
+    __tablename__ = 'users'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    # String(255) rather than Text: MSSQL cannot create a unique index
+    # over a TEXT column.
+    email = Column(String(255), nullable=False, unique=True)
+    display_name = Column(String(255))
+    # 1 = active, 0 = deactivated. A deactivated user is refused even
+    # if an environment override still names them.
+    active = Column(Integer, nullable=False, default=1, server_default='1')
+    # The raw identity value presented by the SSO provider. Kept
+    # separate from the email so a provider that issues a subject id
+    # can be linked later without a schema change.
+    sso_subject = Column(String(255))
+    createdAt = Column(String(64), nullable=False)
+    updatedAt = Column(String(64), nullable=False)
+    lastLoginAt = Column(String(64))
+    createdBy = Column(String(255))
+    updatedBy = Column(String(255))
+
+    groups = relationship(
+        'UserGroup',
+        back_populates='user',
+        cascade='all, delete-orphan',
+    )
+
+
+class UserGroup(Base):
+    """Membership of a user in a named group.
+
+    Two groups are meaningful to the auth layer: ``viewers`` grants
+    access to the authenticated area, and ``admins`` grants edit
+    rights. A user may belong to both; ``admins`` wins.
+    """
+
+    __tablename__ = 'user_groups'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    group_name = Column(String(64), nullable=False)
+    user_id = Column(
+        Integer,
+        ForeignKey('users.id', ondelete='CASCADE'),
+        nullable=False,
+    )
+    createdAt = Column(String(64), nullable=False)
+    createdBy = Column(String(255))
+
+    user = relationship('User', back_populates='groups')
+
+    __table_args__ = (
+        UniqueConstraint(
+            'group_name',
+            'user_id',
+            name='uq_user_groups_name_user',
+        ),
+    )
+
+
 class Entry(Base):
     __tablename__ = 'entries'
 

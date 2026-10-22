@@ -37,9 +37,13 @@ header (see "Access roles" below).
 | `PORT` | `8000` | Port the app listens on |
 | `DATABASE` | `/app/data/dictionary.db` | SQLite file path |
 | `DATABASE_URL` | *(unset)* | SQLAlchemy URL for MSSQL/Postgres (overrides `DATABASE`) |
-| `AUTH_DISABLED` | `true` | Bypass auth (set `false` behind an authenticating proxy) |
-| `ADMIN_EMAILS` | *(empty)* | Comma-separated admin email allow-list |
-| `AUTH_TRUSTED_EMAIL_HEADER` | `Cf-Access-Authenticated-User-Email` | Header carrying the authenticated user's email |
+| `AUTH_DISABLED` | `false` | Bypass auth (set `true` only for local, single-user development) |
+| `SSOUSER_HEADER` | `SSOUSER` | Header carrying the authenticated user's email |
+| `PROXY_SHARED_SECRET` | *(empty)* | Shared secret the proxy must present; the app ignores the identity header without it |
+| `AUTH_TRUSTED_SECRET_HEADER` | `X-Proxy-Secret` | Header carrying that shared secret |
+| `ADMIN_EMAILS` | *(empty)* | Comma-separated admin email allow-list (bootstrap / break-glass) |
+| `VIEWER_EMAILS` | *(empty)* | Comma-separated viewer email allow-list (bootstrap / break-glass) |
+| `SSO_AUTO_PROVISION` | `true` | Create a user record on first sign-in |
 | `ALLOW_DD_ID_EDIT` | `false` | Allow DD ID editing in the admin panel |
 
 ### Change the port
@@ -84,6 +88,17 @@ The app supports three tiers (see `DEPLOYMENT.md` for the full table):
 **admin** (full write). Role is resolved from a trusted email header set
 by your reverse proxy plus the `ADMIN_EMAILS` allow-list. Set
 `AUTH_DISABLED=false` and configure `ADMIN_EMAILS` in production.
+
+The role actually comes from the group memberships stored in the
+database and managed from **Admin → Manage Users**. A person's first
+sign-in creates their record automatically and places them in the
+`viewers` group; an administrator promotes them to `admins` when they
+need edit rights. `ADMIN_EMAILS` remains available as a bootstrap and
+break-glass path.
+
+In production, set `AUTH_DISABLED=false` and `PROXY_SHARED_SECRET`. The
+secret is what stops anyone who can reach the container from becoming
+an administrator by setting the identity header themselves.
 
 ## Database Integration Testing
 

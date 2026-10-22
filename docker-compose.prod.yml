@@ -15,7 +15,17 @@ services:
       # - DATABASE_URL=mssql+pymssql://username:password@sqlserver:1433/data_dictionary
       # Auth (set AUTH_DISABLED=false behind an authenticating proxy)
       - AUTH_DISABLED=false
+      # Shared secret the proxy must present in X-Proxy-Secret. Without
+      # it, anyone who can reach the container can set the SSOUSER
+      # header and become an administrator. Set this.
+      # - PROXY_SHARED_SECRET=change-me-to-a-long-random-value
+      # - AUTH_TRUSTED_SECRET_HEADER=X-Proxy-Secret
+      # - SSOUSER_HEADER=SSOUSER
+      # Bootstrap / break-glass allow-lists. Users are otherwise managed
+      # from Admin -> Manage Users.
       # - ADMIN_EMAILS=alice@ncc.edu,bob@ncc.edu
+      # - VIEWER_EMAILS=carol@ncc.edu
+      # - SSO_AUTO_PROVISION=true
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]

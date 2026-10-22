@@ -19,7 +19,18 @@ services:
       # - DATABASE_URL=mssql+pymssql://username:password@sqlserver:1433/data_dictionary
       # Auth (set AUTH_DISABLED=false behind an authenticating proxy)
       - AUTH_DISABLED=true
+      # The proxy sets the authenticated user's email in this header.
+      # - SSOUSER_HEADER=SSOUSER
+      # Shared secret the proxy must present. When set, the app ignores
+      # the identity header unless the secret matches.
+      # - PROXY_SHARED_SECRET=change-me
+      # - AUTH_TRUSTED_SECRET_HEADER=X-Proxy-Secret
+      # Bootstrap / break-glass allow-lists. Users can also be managed
+      # from Admin -> Manage Users once someone is an administrator.
       # - ADMIN_EMAILS=alice@ncc.edu,bob@ncc.edu
+      # - VIEWER_EMAILS=carol@ncc.edu
+      # Create a user record automatically on first sign-in.
+      # - SSO_AUTO_PROVISION=true
       # Set to 'true' to allow DD ID editing in admin panel (disabled by default for safety)
       # - ALLOW_DD_ID_EDIT=true
     restart: unless-stopped
