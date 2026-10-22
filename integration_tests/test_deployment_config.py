@@ -4,6 +4,10 @@ The repository is published, but the production deployment at
 Northampton Community College has its own registry, host port, admin
 allow-list, and database. Those values live in an untracked override
 file; the tracked compose file must stay generic.
+
+The checks below are pattern based rather than a list of known
+internal names, so that this test file does not itself publish the
+names it is meant to keep out of the repository.
 """
 
 import os
@@ -16,19 +20,27 @@ PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 TRACKED_COMPOSE = os.path.join(PROJECT_ROOT, 'docker-compose.prod.yml')
 LOCAL_COMPOSE = os.path.join(PROJECT_ROOT, 'docker-compose.prod.local.yml')
 
-# Values that identify a specific deployment and must never be committed.
-SITE_SPECIFIC = [
-    'wfulmer',
-    'mmiller',
-    'scarefloor',
-    'sully',
-    'NEXUS',
-]
+# A personal address at a real institution, e.g. someone@northampton.edu.
+PERSONAL_ADDRESS = re.compile(r'[\w.+-]+@[\w-]+\.[\w.-]+')
+
+# An internal host name, e.g. something.admin.example.edu.
+INTERNAL_HOST = re.compile(r'\b[\w-]+\.(?:admin\.|internal\.)[\w-]+\.\w+\b')
+
+# Environment variables that carry a secret and must never be a literal.
+SECRET_VARS = ('DATABASE_URL', 'ADMIN_EMAILS', 'PROXY_SHARED_SECRET')
 
 
 def read_tracked():
     with open(TRACKED_COMPOSE) as handle:
         return handle.read()
+
+
+def active_lines(text):
+    """The lines that are configuration rather than documentation."""
+    for raw in text.splitlines():
+        line = raw.strip()
+        if line and not line.startswith('#'):
+            yield line
 
 
 class TrackedComposeIsGenericTest(unittest.TestCase):
@@ -40,13 +52,26 @@ class TrackedComposeIsGenericTest(unittest.TestCase):
         self.assertIn('services', self.doc)
         self.assertIn('data_dictionary', self.doc['services'])
 
-    def test_no_site_specific_values(self):
-        for needle in SITE_SPECIFIC:
-            with self.subTest(value=needle):
-                self.assertNotIn(
-                    needle, self.text,
-                    f'{needle!r} is deployment-specific and must not be tracked',
-                )
+    def test_no_personal_email_addresses(self):
+        """An allow-list belongs in the untracked override, not here."""
+        for line in active_lines(self.text):
+            for match in PERSONAL_ADDRESS.finditer(line):
+                with self.subTest(line=line):
+                    self.fail(
+                        f'tracked compose file contains an email address: {line}'
+                    )
+
+    def test_no_internal_host_names(self):
+        for line in active_lines(self.text):
+            for match in INTERNAL_HOST.finditer(line):
+                with self.subTest(line=line):
+                    self.fail(
+                        f'tracked compose file contains an internal host: {line}'
+                    )
+
+    def test_no_internal_registry_variable(self):
+        """The image comes from IMAGE, not a site-specific registry variable."""
+        self.assertNotIn('NEXUS', self.text)
 
     def test_no_inline_password(self):
         """A credential must never appear in the tracked compose file."""
@@ -54,10 +79,13 @@ class TrackedComposeIsGenericTest(unittest.TestCase):
             r'(DATABASE_URL|ADMIN_EMAILS|PROXY_SHARED_SECRET)='
             r'(?!\$\{|\s*$)',  # a bare value, not a variable reference
         )
-        for raw in self.text.splitlines():
-            line = raw.strip()
-            if not line or line.startswith('#'):
-                # Commented examples are documentation, not configuration.
+        for line in active_lines(self.text):
+            match = pattern.search(line)
+            if match:
+                with self.subTest(line=line):
+                    self.fail(
+                        f'tracked compose file sets a literal value: {line}'
+                    )
                 continue
             match = pattern.search(line)
             if match:
