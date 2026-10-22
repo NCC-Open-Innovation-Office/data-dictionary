@@ -25,3 +25,11 @@ env/
 
 # Playwright MCP browser artifacts
 .playwright-mcp/
+
+# Local deployment overrides and secrets.
+# These hold values that are specific to one deployment and must not
+# be published. docker-compose.prod.yml stays tracked and generic;
+# docker-compose.prod.local.yml carries the per-deployment values.
+docker-compose.*.local.yml
+.env
+.env.*

@@ -144,6 +144,54 @@ it. Use `ADMIN_EMAILS` as the break-glass path if that ever happens.
 
 ### Production configuration
 
+`docker-compose.prod.yml` is generic and safe to publish. Everything
+deployment-specific is a variable, so one file serves every site.
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `IMAGE` | `ghcr.io/ncc-open-innovation-office/data-dictionary:latest` | The container image to run. Point this at your own registry if you do not use GitHub Container Registry. |
+| `HOST_PORT` | `8000` | The host port the container is published on. The container always listens on 8000. |
+
+The remaining values are the same environment variables the app reads
+directly (`DATABASE_URL`, `ADMIN_EMAILS`, `PROXY_SHARED_SECRET`, and so
+on). Put them in a `.env` file beside the compose file, or in an
+untracked override file.
+
+### Deployment-specific overrides
+
+To keep site-specific values out of version control, add an untracked
+override file and pass it after the generic one:
+
+```bash
+docker compose -f docker-compose.prod.yml \
+               -f docker-compose.prod.local.yml up -d
+```
+
+`docker-compose.prod.local.yml` is already in `.gitignore`. Override
+only what genuinely differs:
+
+```yaml
+services:
+  data_dictionary:
+    image: registry.example.org/data_dictionary:${VERSION}
+    environment:
+      - ADMIN_EMAILS=${ADMIN_EMAILS}
+      - DATABASE_URL=${DATABASE_URL}
+```
+
+Two things to know about how Compose merges these files:
+
+- **Mappings merge by key** and **sequences are appended**, so
+  overriding a list such as `ports` leaves the generic entry in place
+  as well. Use `HOST_PORT` instead of redeclaring `ports`.
+- **Environment entries merge by variable name**, so adding
+  `ADMIN_EMAILS` in the override keeps `PORT` and `AUTH_DISABLED` from
+  the generic file.
+
+Check the result with `docker compose -f ... config` before deploying.
+
+### Auth configuration
+
 For production, set `AUTH_DISABLED=false`, `PROXY_SHARED_SECRET`, and
 `ADMIN_EMAILS` in your compose environment:
 

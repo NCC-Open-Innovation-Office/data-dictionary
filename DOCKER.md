@@ -46,6 +46,15 @@ header (see "Access roles" below).
 | `SSO_AUTO_PROVISION` | `true` | Create a user record on first sign-in |
 | `ALLOW_DD_ID_EDIT` | `false` | Allow DD ID editing in the admin panel |
 
+### Compose-only variables
+
+These are read by `docker-compose.prod.yml` rather than by the app:
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `IMAGE` | `ghcr.io/ncc-open-innovation-office/data-dictionary:latest` | Container image to run |
+| `HOST_PORT` | `8000` | Host port the container is published on |
+
 ### Change the port
 Edit `docker-compose.yml`:
 ```yaml

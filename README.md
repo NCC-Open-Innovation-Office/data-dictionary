@@ -31,6 +31,14 @@ A modern web-based data dictionary platform for managing organizational terms, d
    docker compose -f docker-compose.prod.yml up -d
    ```
 
+   The compose file is generic. Set `IMAGE` to use a different registry
+   and `HOST_PORT` to publish on a different host port:
+   ```bash
+   IMAGE=registry.example.org/data_dictionary:v1.2.3 \
+   HOST_PORT=8080 \
+     docker compose -f docker-compose.prod.yml up -d
+   ```
+
 4. **Access the application:**
    - Public view: http://localhost:8000/
    - Admin view: http://localhost:8000/admin/

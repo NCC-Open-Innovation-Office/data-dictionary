@@ -1,9 +1,21 @@
 # Production Docker Compose - single container
+#
+# This file is generic and safe to publish. Deployment-specific values
+# (registry, host port, admin allow-list, database URL) come from the
+# environment or from a local override file that is not tracked.
+#
+# Overrides:
+#   - Put deployment values in a .env file next to this one, or
+#   - Add an untracked docker-compose.prod.local.yml and run
+#       docker compose -f docker-compose.prod.yml \
+#                      -f docker-compose.prod.local.yml up -d
+#
+# See DEPLOYMENT.md for the full list of environment variables.
 services:
   data_dictionary:
-    image: ${NEXUS}:8082/data_dictionary:${VERSION}
+    image: ${IMAGE:-ghcr.io/ncc-open-innovation-office/data-dictionary:latest}
     ports:
-      - "8001:8000"
+      - "${HOST_PORT:-8000}:8000"
     deploy:
       mode: global
       update_config:
@@ -11,22 +23,23 @@ services:
         delay: 20s
         order: start-first
     environment:
-      # - PORT=443
-      - ADMIN_EMAILS=wfulmer@northampton.edu,mmiller@northampton.edu
-      - SSOUSER_HEADER=SSOUSER
-      - DATABASE_URL=${DATABASE_URL}  # set in the environment, e.g.
+      - PORT=8000
+      # Database. Set DATABASE_URL for MSSQL or PostgreSQL; otherwise
+      # the app uses the SQLite file under /app/data.
       #   mssql+pymssql://<username>:<password>@<host>:1433/<database>
-      #- DATABASE=/app/data/dictionary.db
-      # Set DATABASE_URL to use a SQLAlchemy connection URL instead of SQLite.
-      # - DATABASE_URL=mssql+pymssql://username:password@sqlserver:1433/data_dictionary
-      # Auth (set AUTH_DISABLED=false behind an authenticating proxy)
-      - AUTH_DISABLED=false
-      # Shared secret the proxy must present in X-Proxy-Secret. Without
-      # it, anyone who can reach the container can set the SSOUSER
-      # header and become an administrator. Set this.
+      #   postgresql+psycopg2://<username>:<password>@<host>:5432/<database>
+      # - DATABASE_URL=${DATABASE_URL}
+      # - DATABASE=/app/data/dictionary.db
+      # Auth. Behind an authenticating proxy, set AUTH_DISABLED=false
+      # and PROXY_SHARED_SECRET.
+      - AUTH_DISABLED=${AUTH_DISABLED:-false}
+      # The proxy sets the authenticated user's email in this header.
+      # - SSOUSER_HEADER=SSOUSER
+      # Shared secret the proxy must present. Without it, anyone who can
+      # reach the container can set the SSOUSER header and become an
+      # administrator. Set this in every real deployment.
       # - PROXY_SHARED_SECRET=change-me-to-a-long-random-value
       # - AUTH_TRUSTED_SECRET_HEADER=X-Proxy-Secret
-      # - SSOUSER_HEADER=SSOUSER
       # Bootstrap / break-glass allow-lists. Users are otherwise managed
       # from Admin -> Manage Users.
       # - ADMIN_EMAILS=alice@ncc.edu,bob@ncc.edu
