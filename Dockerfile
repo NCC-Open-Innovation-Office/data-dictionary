@@ -11,7 +11,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
 
 # Copy the API application code.
-COPY api/__init__.py api/app.py api/auth.py api/db.py api/models.py api/wsgi.py ./api/
+COPY api/__init__.py api/app.py api/auth.py api/db.py api/models.py api/users.py api/wsgi.py ./api/
 
 # Copy the front-end static files into /app so Flask serves them at /.
 COPY index.html styles.css public-api.js logo-header.png ./
@@ -23,7 +23,12 @@ RUN mkdir -p /app/data
 # Default to SQLite for local persistence; set DATABASE_URL for MSSQL/Postgres.
 ENV DATABASE=/app/data/dictionary.db
 ENV PORT=8000
-ENV AUTH_DISABLED=true
+# Fail closed: the image is not wide open by default. Set
+# AUTH_DISABLED=true only for local, single-user development, and
+# always set PROXY_SHARED_SECRET in a real deployment.
+ENV AUTH_DISABLED=false
+
+# Unbuffered output so container logs reach the log collector promptly.
 ENV PYTHONUNBUFFERED=1
 
 EXPOSE 8000

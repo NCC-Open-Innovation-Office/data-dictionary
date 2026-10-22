@@ -19,7 +19,10 @@ try:
     from api.models import EntryDefinition
     from api.models import EntryLink
     from api.models import EntryTag
+    from api.models import GROUP_ADMINS
+    from api.models import KNOWN_GROUPS
     from api.models import Tag
+    from api.models import User
 except ImportError:
     from auth import register_auth
     from db import Database
@@ -28,7 +31,10 @@ except ImportError:
     from models import EntryDefinition
     from models import EntryLink
     from models import EntryTag
+    from models import GROUP_ADMINS
+    from models import KNOWN_GROUPS
     from models import Tag
+    from models import User
 
 
 def utcnow_iso():
@@ -170,6 +176,103 @@ def get_database():
     return current_app.extensions['dd_db']
 
 
+def _map_without_static(url_map):
+    """Return a copy of the URL map with Flask's static rule removed.
+
+    Flask registers ``/<path:filename>`` -> ``static`` automatically
+    when a static folder is configured, and that rule serves any file
+    under the folder. Rebuilding the map without it keeps the URL
+    matching logic inside Werkzeug instead of relying on private
+    attributes.
+    """
+    from werkzeug.routing import Map
+
+    rules = [
+        rule
+        for rule in url_map.iter_rules()
+        if rule.endpoint != 'static'
+    ]
+    new_map = Map(
+        rules,
+        default_subdomain=url_map.default_subdomain,
+        strict_slashes=url_map.strict_slashes,
+        merge_slashes=url_map.merge_slashes,
+        redirect_defaults=url_map.redirect_defaults,
+        converters=dict(url_map.converters),
+        sort_parameters=url_map.sort_parameters,
+        sort_key=url_map.sort_key,
+        host_matching=url_map.host_matching,
+    )
+    new_map.host_matching = url_map.host_matching
+    return new_map
+
+
+# The only files the web server will hand out. Everything else in the
+# project tree -- the SQLite database, the Python sources, the .git
+# directory, the compose files -- is invisible to HTTP clients.
+STATIC_ASSETS = frozenset({
+    'index.html',
+    'styles.css',
+    'public-api.js',
+    'public.js',
+    'logo-header.png',
+    'admin/index.html',
+    'admin/admin-api.js',
+    'admin/admin.js',
+})
+
+
+def _looks_like_project_file(filename):
+    """Does this path name a real file in the project tree?
+
+    Some project files have no extension (``Dockerfile``, ``LICENSE``).
+    Without this check a request for ``/Dockerfile`` would be treated
+    as an application route and answered with the SPA shell.
+    """
+    project_root = current_app.static_folder
+    if not project_root or '/' in filename:
+        return False
+    candidate = os.path.join(project_root, filename)
+    try:
+        return os.path.isfile(candidate)
+    except OSError:
+        return False
+
+
+def serve_static_asset(relative_path):
+    """Serve a front-end asset from the allow-list, or raise 404.
+
+    Two protections are in play. The allow-list means an unlisted file
+    cannot be fetched at all, and the resolved path is confirmed to sit
+    inside the project root so a crafted path cannot escape it.
+
+    A 404 is raised rather than returned so the SPA fallback handler
+    can decide between the application shell and a genuine error.
+    """
+    from flask import abort
+
+    if relative_path not in STATIC_ASSETS:
+        abort(404)
+
+    project_root = current_app.static_folder
+    if not project_root:
+        abort(404)
+
+    target = os.path.abspath(os.path.join(project_root, relative_path))
+    root = os.path.abspath(project_root)
+    if os.path.commonpath([root, target]) != root:
+        abort(404)
+    if not os.path.isfile(target):
+        abort(404)
+
+    return current_app.send_static_file(relative_path)
+
+
+def not_found_response():
+    """A 404 that the SPA fallback will not turn into a shell."""
+    return jsonify({'error': 'Not found'}), 404
+
+
 def current_user():
     """The authenticated user's email, falling back to the request body.
 
@@ -189,6 +292,84 @@ def current_user():
 
 def allow_dd_id_edit():
     return current_app.config['ALLOW_DD_ID_EDIT']
+
+
+def _users_module():
+    """Import the user helpers, tolerating both package layouts."""
+    try:
+        from api import users as users_module
+    except ImportError:
+        import users as users_module
+    return users_module
+
+
+def user_to_dict(user, session=None):
+    return _users_module().user_to_dict(user, session)
+
+
+def find_user(session, email):
+    return _users_module().find_user(session, email)
+
+
+def add_user_to_group(session, user, group_name, *, created_by, timestamp):
+    return _users_module().add_user_to_group(
+        session,
+        user,
+        group_name,
+        created_by=created_by,
+        timestamp=timestamp,
+    )
+
+
+def remove_user_from_group(session, user, group_name):
+    return _users_module().remove_user_from_group(session, user, group_name)
+
+
+def _has_other_admin(session, user):
+    """Is there an administrator other than ``user``?
+
+    Used to stop the last administrator from being removed, which
+    would leave the deployment unmanageable. A user who is not an
+    administrator in the first place does not need this check.
+    """
+    if not _is_admin(session, user):
+        return True
+
+    for other in session.query(User).all():
+        if other.id == user.id:
+            continue
+        if not other.active:
+            continue
+        if _is_admin(session, other):
+            return True
+
+    # An environment override also counts as an administrator, because
+    # that person can still sign in and administer the deployment.
+    try:
+        from api.users import env_admin_emails
+    except ImportError:
+        from users import env_admin_emails
+    env_admins = env_admin_emails()
+    if user.email.lower() in env_admins:
+        # This user is an admin by virtue of the environment list, so
+        # removing the record does not lock the deployment out -- but
+        # only if some other address is also listed.
+        return len(env_admins) > 1
+    return False
+
+
+def _is_admin(session, user):
+    """Does this user hold the admin role right now?"""
+    if not user.active:
+        return False
+    groups = {membership.group_name for membership in user.groups}
+    if GROUP_ADMINS in groups:
+        return True
+    try:
+        from api.users import env_admin_emails
+    except ImportError:
+        from users import env_admin_emails
+    return user.email.lower() in env_admin_emails()
 
 
 def create_history_record(
@@ -229,6 +410,16 @@ def create_app(database_url=None, initialize=True, testing=False):
     app.config['ALLOW_DD_ID_EDIT'] = (
         os.environ.get('ALLOW_DD_ID_EDIT', 'false').lower() == 'true'
     )
+
+    # Flask auto-registers a catch-all static route that maps any URL
+    # straight onto a file under the static folder. That would serve
+    # the SQLite database, the Python sources, and the .git directory
+    # to anyone who can reach the port, so the route is removed and
+    # replaced by an allow-listed handler in register_routes().
+    #
+    # The route is removed by rebuilding the map with the static rule
+    # filtered out, which avoids poking at Werkzeug internals.
+    app.url_map = _map_without_static(app.url_map)
 
     database = Database(database_url=database_url, testing=testing)
     app.extensions['dd_db'] = database
@@ -933,6 +1124,212 @@ def register_routes(app):
         except SQLAlchemyError as exc:
             return jsonify({'error': str(exc)}), 500
 
+    # ------------------------------------------------------------------
+    # User management
+    # ------------------------------------------------------------------
+    # Every route in this block requires the admin role. The auth layer
+    # enforces that centrally: any write method needs admin, and
+    # 'list_users' is registered as a viewer-gated read that the
+    # before_request hook upgrades because it is an admin concern.
+    @app.route('/api/users', methods=['GET'])
+    def list_users():
+        try:
+            with get_database().session_scope() as session:
+                users = (
+                    session.query(User)
+                    .order_by(User.email.asc())
+                    .all()
+                )
+                return jsonify({
+                    'users': [
+                        user_to_dict(user, session) for user in users
+                    ],
+                    'groups': list(KNOWN_GROUPS),
+                })
+        except SQLAlchemyError as exc:
+            return jsonify({'error': str(exc)}), 500
+
+    @app.route('/api/users', methods=['POST'])
+    def create_user():
+        """Seed a user before their first sign-in.
+
+        An administrator can add an email address ahead of time so
+        that, when the person signs in through SSO, the existing
+        record is merged rather than created from scratch.
+        """
+        data = request.get_json(silent=True) or {}
+        email = (data.get('email') or '').strip().lower()
+        if not email or '@' not in email:
+            return jsonify({'error': 'A valid email is required'}), 400
+
+        groups = data.get('groups') or []
+        if not isinstance(groups, list):
+            return jsonify({'error': 'groups must be a list'}), 400
+        invalid = [
+            name for name in groups if name not in KNOWN_GROUPS
+        ]
+        if invalid:
+            return jsonify({
+                'error': (
+                    'Unknown group(s): '
+                    + ', '.join(str(name) for name in invalid)
+                ),
+            }), 400
+
+        actor = current_user()
+        now = utcnow_iso()
+        try:
+            with get_database().session_scope() as session:
+                user = find_user(session, email)
+                created = False
+                if user is None:
+                    created = True
+                    user = User(
+                        email=email,
+                        display_name=(data.get('displayName') or '').strip(),
+                        active=1,
+                        sso_subject='',
+                        createdAt=now,
+                        updatedAt=now,
+                        createdBy=actor,
+                        updatedBy=actor,
+                    )
+                    session.add(user)
+                    session.flush()
+                for name in groups:
+                    add_user_to_group(
+                        session,
+                        user,
+                        name,
+                        created_by=actor,
+                        timestamp=now,
+                    )
+                return jsonify({
+                    'message': (
+                        'User created' if created else 'User updated'
+                    ),
+                    'created': created,
+                    'user': user_to_dict(user, session),
+                }), 201 if created else 200
+        except SQLAlchemyError as exc:
+            return jsonify({'error': str(exc)}), 500
+
+    @app.route('/api/users/<int:user_id>', methods=['PUT'])
+    def update_user(user_id):
+        """Change a user's active flag and group membership."""
+        data = request.get_json(silent=True) or {}
+        actor = current_user()
+        now = utcnow_iso()
+        try:
+            with get_database().session_scope() as session:
+                user = session.get(User, user_id)
+                if user is None:
+                    return jsonify({'error': 'User not found'}), 404
+
+                # Validate everything before changing anything, so a
+                # rejected request leaves the record untouched.
+                new_groups = None
+                if 'groups' in data:
+                    new_groups = data.get('groups') or []
+                    if not isinstance(new_groups, list):
+                        return jsonify(
+                            {'error': 'groups must be a list'}
+                        ), 400
+                    invalid = [
+                        name for name in new_groups
+                        if name not in KNOWN_GROUPS
+                    ]
+                    if invalid:
+                        return jsonify({
+                            'error': (
+                                'Unknown group(s): '
+                                + ', '.join(
+                                    str(name) for name in invalid
+                                )
+                            ),
+                        }), 400
+
+                new_active = None
+                if 'active' in data:
+                    new_active = 1 if data['active'] else 0
+
+                # Removing the last administrator would leave the
+                # deployment with nobody able to manage it.
+                if new_active == 0 and not _has_other_admin(session, user):
+                    return jsonify({
+                        'error': (
+                            'Cannot deactivate the last administrator'
+                        ),
+                    }), 400
+                if (
+                    new_groups is not None
+                    and GROUP_ADMINS not in new_groups
+                    and not _has_other_admin(session, user)
+                ):
+                    return jsonify({
+                        'error': (
+                            'Cannot remove the last administrator'
+                        ),
+                    }), 400
+
+                # Apply the changes.
+                if new_active is not None:
+                    user.active = new_active
+
+                if 'displayName' in data:
+                    user.display_name = (
+                        data.get('displayName') or ''
+                    ).strip()
+
+                if new_groups is not None:
+                    for name in KNOWN_GROUPS:
+                        if name in new_groups:
+                            add_user_to_group(
+                                session,
+                                user,
+                                name,
+                                created_by=actor,
+                                timestamp=now,
+                            )
+                        else:
+                            remove_user_from_group(session, user, name)
+
+                user.updatedAt = now
+                user.updatedBy = actor
+                session.flush()
+                return jsonify({
+                    'message': 'User updated',
+                    'user': user_to_dict(user, session),
+                })
+        except SQLAlchemyError as exc:
+            return jsonify({'error': str(exc)}), 500
+
+    @app.route('/api/users/<int:user_id>', methods=['DELETE'])
+    def delete_user(user_id):
+        try:
+            with get_database().session_scope() as session:
+                user = session.get(User, user_id)
+                if user is None:
+                    return jsonify({'error': 'User not found'}), 404
+
+                # Refuse to remove the last administrator: the
+                # deployment would be left with nobody able to manage
+                # users or content.
+                if not _has_other_admin(session, user):
+                    return jsonify({
+                        'error': (
+                            'Cannot remove the last administrator'
+                        ),
+                    }), 400
+
+                session.delete(user)
+                return jsonify({
+                    'message': 'User removed',
+                    'email': user.email,
+                })
+        except SQLAlchemyError as exc:
+            return jsonify({'error': str(exc)}), 500
+
     @app.route('/api/backup', methods=['GET'])
     def backup_database():
         try:
@@ -1159,30 +1556,85 @@ def register_routes(app):
     # ------------------------------------------------------------------
     # Front-end (SPA) static-file serving
     # ------------------------------------------------------------------
-    # Flask's static_folder serves known files (index.html, styles.css,
-    # *.js, images) at the root. This catch-all provides SPA-style
-    # fallback: unknown non-API paths return the public index.html, and
-    # /admin(/**) returns the admin shell.
+    # Static assets are served from an explicit allow-list rather than
+    # from the filesystem root. Flask's built-in static handler maps
+    # any URL straight onto a file path, which would otherwise expose
+    # the SQLite database, the Python sources, and the .git directory
+    # to anyone who can reach the port.
     @app.route('/admin', methods=['GET'])
     @app.route('/admin/', methods=['GET'])
     @app.route('/admin/<path:subpath>', methods=['GET'])
     def admin_shell(subpath=''):
-        # Only serve the admin shell for the bare /admin path or non-file paths.
+        # Only serve the shell for the bare /admin path or non-file paths.
         # Requests for real admin assets (admin-api.js, admin.js) are
-        # served by the static handler.
+        # served by the allow-listed asset handler; anything else is a
+        # 404 rather than the shell, so a missing asset is not masked.
         if subpath and '.' in subpath.split('/')[-1]:
-            # Defer to the static file handler for real files.
-            return app.send_static_file(f'admin/{subpath}')
-        return app.send_static_file('admin/index.html')
+            if f'admin/{subpath}' in STATIC_ASSETS:
+                return serve_static_asset(f'admin/{subpath}')
+            return not_found_response()
+        return serve_static_asset('admin/index.html')
+
+    @app.route('/<path:filename>', methods=['GET'])
+    def static_asset(filename):
+        # The API namespace is handled by its own routes and the API
+        # 404 handler; never answer an /api/* path with the shell.
+        if filename == 'api' or filename.startswith('api/'):
+            return not_found_response()
+
+        # Dotfiles (/.git/config, /.env) are never application routes.
+        if any(part.startswith('.') for part in filename.split('/')):
+            return not_found_response()
+
+        # A request for a specific file is either an allow-listed
+        # asset or a 404. It must never fall through to the SPA
+        # shell, otherwise a path like /Dockerfile would return the
+        # public page with a 200 and look like it succeeded.
+        #
+        # A path is treated as a file request when it has an
+        # extension, names a directory, or matches a real file in the
+        # project tree (some project files have no extension).
+        if (
+            '.' in filename
+            or '/' in filename
+            or _looks_like_project_file(filename)
+        ):
+            if filename in STATIC_ASSETS:
+                return serve_static_asset(filename)
+            # A nested path whose last segment is not a file (no
+            # extension) is an application route, not a missing file.
+            if (
+                '/' in filename
+                and '.' not in filename.rsplit('/', 1)[-1]
+                and not _looks_like_project_file(filename)
+            ):
+                return current_app.send_static_file('index.html')
+            return not_found_response()
+        # A bare path with no extension is an application route, so
+        # the SPA shell is the right answer.
+        return current_app.send_static_file('index.html')
 
     @app.route('/', methods=['GET'])
     def index():
-        return app.send_static_file('index.html')
+        return serve_static_asset('index.html')
 
     @app.errorhandler(404)
     def spa_fallback(error):
         # Don't intercept /api/* — those are real 404s.
         if request.path.startswith('/api/'):
-            return jsonify({'error': 'Not found'}), 404
-        # Everything else falls back to the public shell.
-        return app.send_static_file('index.html')
+            return not_found_response()
+
+        # Dotfiles (/.git/config, /.env) are never application routes.
+        if any(part.startswith('.') for part in request.path.split('/')):
+            return not_found_response()
+
+        # A path whose last segment looks like a file is a genuine
+        # 404: serving the HTML shell there would mask a missing
+        # asset behind a 200.
+        last_segment = request.path.rsplit('/', 1)[-1]
+        if '.' in last_segment:
+            return not_found_response()
+
+        # Everything else is an application route: return the public
+        # shell so client-side routing keeps working.
+        return current_app.send_static_file('index.html')

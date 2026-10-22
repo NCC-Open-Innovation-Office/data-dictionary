@@ -129,9 +129,13 @@ injection in production.
 - `PORT`: app port (default: 8000)
 - `DATABASE`: SQLite file path shorthand (default: /app/data/dictionary.db)
 - `DATABASE_URL`: Full SQLAlchemy connection URL. Examples: `mssql+pymssql://<username>:<password>@sqlserver:1433/data_dictionary`, `postgresql+psycopg2://<username>:<password>@postgres:5432/data_dictionary`
-- `AUTH_DISABLED`: bypass auth (default: `true`; set `false` behind a proxy)
-- `ADMIN_EMAILS`: comma-separated admin email allow-list
-- `AUTH_TRUSTED_EMAIL_HEADER`: header carrying the authenticated email (default: `Cf-Access-Authenticated-User-Email`)
+- `AUTH_DISABLED`: bypass auth (default: `false` in the image; set `true` only for local dev)
+- `SSOUSER_HEADER`: header carrying the authenticated email (default: `SSOUSER`)
+- `PROXY_SHARED_SECRET`: shared secret the proxy must present; the app ignores the identity header without it
+- `AUTH_TRUSTED_SECRET_HEADER`: header carrying that secret (default: `X-Proxy-Secret`)
+- `ADMIN_EMAILS`: comma-separated admin email allow-list (bootstrap / break-glass)
+- `VIEWER_EMAILS`: comma-separated viewer email allow-list (bootstrap / break-glass)
+- `SSO_AUTO_PROVISION`: create a user record on first sign-in (default: `true`)
 
 ### Volume Mounts
 

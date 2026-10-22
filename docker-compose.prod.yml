@@ -13,14 +13,25 @@ services:
     environment:
       # - PORT=443
       - ADMIN_EMAILS=wfulmer@northampton.edu,mmiller@northampton.edu
-      - AUTH_TRUSTED_EMAIL_HEADER=SSOUSER
-      - DATABASE_URL=mssql+pymssql://sully_rw:4YA8E-adW.k.Aei@scarefloor.admin.northampton.edu:1433/sully
+      - SSOUSER_HEADER=SSOUSER
+      - DATABASE_URL=${DATABASE_URL}  # set in the environment, e.g.
+      #   mssql+pymssql://<username>:<password>@<host>:1433/<database>
       #- DATABASE=/app/data/dictionary.db
       # Set DATABASE_URL to use a SQLAlchemy connection URL instead of SQLite.
       # - DATABASE_URL=mssql+pymssql://username:password@sqlserver:1433/data_dictionary
       # Auth (set AUTH_DISABLED=false behind an authenticating proxy)
       - AUTH_DISABLED=false
+      # Shared secret the proxy must present in X-Proxy-Secret. Without
+      # it, anyone who can reach the container can set the SSOUSER
+      # header and become an administrator. Set this.
+      # - PROXY_SHARED_SECRET=change-me-to-a-long-random-value
+      # - AUTH_TRUSTED_SECRET_HEADER=X-Proxy-Secret
+      # - SSOUSER_HEADER=SSOUSER
+      # Bootstrap / break-glass allow-lists. Users are otherwise managed
+      # from Admin -> Manage Users.
       # - ADMIN_EMAILS=alice@ncc.edu,bob@ncc.edu
+      # - VIEWER_EMAILS=carol@ncc.edu
+      # - SSO_AUTO_PROVISION=true
     secrets:
       - source: data_dictionary
         target: config
