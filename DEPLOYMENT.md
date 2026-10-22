@@ -114,6 +114,47 @@ The last administrator cannot be removed, demoted, or deactivated,
 because doing so would leave the deployment with nobody able to manage
 it. Use `ADMIN_EMAILS` as the break-glass path if that ever happens.
 
+### Creating the first administrator
+
+A new deployment has no administrators, and the first person to sign
+in is placed in the `viewers` group — so they can read but not write,
+and the Manage Users panel is not available to them. **There is no way
+to grant the first admin from inside the application**, because every
+route that could do it requires the admin role you are trying to get.
+
+Bootstrap the first administrator from the environment instead. Set
+`ADMIN_EMAILS` to the email address of the person who will administer
+the deployment:
+
+```bash
+# docker-compose.prod.local.yml, or the container environment
+- ADMIN_EMAILS=alice@ncc.edu
+```
+
+That address then resolves to the `admin` role on every request, so
+they can sign in and use **Admin → Manage Users** to grant the `admins`
+group to anyone else.
+
+Two things to know:
+
+- The list can hold more than one address. It is a break-glass
+  override: it can *raise* a role, never lower one, and it cannot
+  restore a deactivated user.
+- It is not a substitute for the `admins` group. Once somebody has
+  been given the `admins` group in the database, that is the source of
+  truth. Keeping the address in `ADMIN_EMAILS` as well is a reasonable
+  way to hold a spare key, but it is not required.
+
+To promote somebody who has already signed in, use either:
+
+- **Admin → Manage Users → Make Admin**, which adds the `admins` group
+  in the database, or
+- `PUT /api/users/<id>` with `{"groups": ["viewers", "admins"]}`.
+
+To seed somebody *before* their first sign-in — so they arrive with the
+right groups and no sign-in is needed to create the record — use
+`POST /api/users` with `{"email": "...", "groups": ["viewers", "admins"]}`.
+
 ### User API
 
 | Method | Path | Purpose |
